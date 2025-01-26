@@ -614,6 +614,85 @@ model = Qwen2VLForConditionalGeneration.from_pretrained(
 )
 ```
 
+### Multi-turn Conversation
+There is an easy way to use Qwen2-VL for multi-turn conversations which supports pure text, single image, multi-images. You can use it as follows:
+
+First copy the class `Qwen2VL`.
+```python
+class Qwen2VL:
+    def __init__(self, model_path = None, max_new_tokens = 1024, min_pixels = 256*28*28, max_pixels = 1280*28*28):
+        self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+            model_path,
+            torch_dtype="auto",
+            device_map="auto",
+        )
+        self.processor = AutoProcessor.from_pretrained(model_path, min_pixels=min_pixels, max_pixels=max_pixels)
+        self.gen_config = {
+            "max_new_tokens": max_new_tokens,
+        }
+    
+    def parse_input(self, query=None, imgs=None):
+        if imgs is None:
+            messages = [{"role": "user", "content": query}]
+            return messages
+        
+        if isinstance(imgs, str):
+            imgs = [imgs]
+        content = []
+        for img in imgs:
+            content.append({"type": "image", "image": img})
+        content.append({"type": "text", "text": query})
+        messages = [{"role": "user", "content": content}]
+        return messages
+
+    def chat(self, query = None, imgs = None, history = None):
+        if history is None:
+            history = []
+            
+        user_query = self.parse_input(query, imgs)
+        history.extend(user_query)
+
+        text = self.processor.apply_chat_template(history, tokenize=False, add_generation_prompt=True, add_vision_id=True)
+        image_inputs, video_inputs = process_vision_info(history)
+        inputs = self.processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        )
+
+        inputs = inputs.to("cuda")
+        generated_ids = self.model.generate(**inputs, **self.gen_config)
+        generated_ids_trimmed = [
+            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        response = self.processor.batch_decode(
+            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
+
+        history.append({"role": "assistant", "content": response})
+
+        del inputs, generated_ids, generated_ids_trimmed
+        torch.cuda.empty_cache()
+        gc.collect()
+        return response, history
+```
+Then use the `chat` API in `Qwen2VL` class, `query` parameter is the user query in natural language format, `imgs` parameter is the image url or path or base64, `history` parameter is the history of the conversation.
+```python
+chat_model = Qwen2VL(model_path="local path/repo id")
+
+# First turn
+history = None
+response, history = chat_model.chat(query="hello", history=history)
+print(response, history)
+
+# Second turn
+# For image type, (imgae_url, local_image_path, base64)
+# For image count, ([image], [image1, image2], ...)
+response, history = chat_model.chat(query="please describe the image", imgs=["image_url"], history=history)
+print(response, history)
+```
 
 ### Try Qwen2-VL-72B with API!
 
