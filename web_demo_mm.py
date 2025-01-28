@@ -13,7 +13,7 @@ import torch
 from qwen_vl_utils import process_vision_info
 from transformers import AutoProcessor, Qwen2VLForConditionalGeneration, TextIteratorStreamer
 
-DEFAULT_CKPT_PATH = 'Qwen/Qwen2-VL-7B-Instruct'
+DEFAULT_CKPT_PATH = 'Qwen/Qwen2.5-VL-7B-Instruct'
 
 
 def _get_args():
