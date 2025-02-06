@@ -1,0 +1,7 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Qwen2.5-VL"
+authors:
+  - name: "Qwen Team"
+year: 2025
+url: "https://qwenlm.github.io/blog/qwen2.5-vl/"
