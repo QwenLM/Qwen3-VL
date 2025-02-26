@@ -34,6 +34,12 @@ FPS = 2.0
 FPS_MIN_FRAMES = 4
 FPS_MAX_FRAMES = 768
 
+# Allow user to override max frames via environment variable
+USER_MAX_FRAMES = int(os.environ.get('QWEN_VL_MAX_FRAMES', FPS_MAX_FRAMES))
+if USER_MAX_FRAMES != FPS_MAX_FRAMES:
+    logger.info(f"Overriding FPS_MAX_FRAMES from {FPS_MAX_FRAMES} to {USER_MAX_FRAMES}")
+    FPS_MAX_FRAMES = USER_MAX_FRAMES
+
 # Set the maximum number of video token inputs.
 # Here, 128K represents the maximum number of input tokens for the VLLM model.
 # Remember to adjust it according to your own configuration.
@@ -248,6 +254,7 @@ def _read_video_decord(
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
     nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
     idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
+    logger.info(f"Extracting {nframes} frames from video with {total_frames} total frames")
     video = vr.get_batch(idx).asnumpy()
     video = torch.tensor(video).permute(0, 3, 1, 2)  # Convert to TCHW format
     sample_fps = nframes / max(total_frames, 1e-6) * video_fps
