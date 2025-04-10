@@ -18,7 +18,8 @@ from PIL import Image
 from torchvision import io, transforms
 from torchvision.transforms import InterpolationMode
 from typing import Optional
-
+import concurrent.futures
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -253,6 +254,45 @@ def _read_video_decord(
     sample_fps = nframes / max(total_frames, 1e-6) * video_fps
     return video, sample_fps
 
+def _read_video_cv2(
+    ele: dict,
+) -> (torch.Tensor, float):
+    """read video using cv2
+
+    Args:
+        ele (dict): a dict contains the configuration of video.
+        support keys:
+            - video: the path of video. support local path.
+            - video_start: the start time of video.
+            - video_end: the end time of video.
+    Returns:
+        torch.Tensor: the video tensor with shape (T, C, H, W).
+    """
+    import cv2
+    video_path = ele["video"]
+    st = time.time()
+    cap = cv2.VideoCapture(video_path)
+    # TODO: support start_pts and end_pts
+    if 'video_start' in ele or 'video_end' in ele:
+        raise NotImplementedError("not support start_pts and end_pts in decord for now.")
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    video_fps = cap.get(cv2.CAP_PROP_FPS)
+    logger.info(f"cv2:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
+    nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    indices = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
+    frames = []
+    for idx in indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frame = cap.read()
+        if ret:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames.append(frame)
+        else:
+            nframes-=1
+    cap.release()
+    video = torch.tensor(np.array(frames)).permute(0, 3, 1, 2)  # Convert to TCHW format
+    sample_fps = nframes / max(total_frames, 1e-6) * video_fps
+    return video, sample_fps
 
 VIDEO_READER_BACKENDS = {
     "decord": _read_video_decord,
@@ -273,12 +313,20 @@ def get_video_reader_backend() -> str:
     print(f"qwen-vl-utils using {video_reader_backend} to read video.", file=sys.stderr)
     return video_reader_backend
 
+def read_video_backend(ele, video_reader_backend):
+    return VIDEO_READER_BACKENDS[video_reader_backend](ele)
 
 def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, return_video_sample_fps: bool = False) -> torch.Tensor | list[Image.Image]:
     if isinstance(ele["video"], str):
         video_reader_backend = get_video_reader_backend()
         try:
-            video, sample_fps = VIDEO_READER_BACKENDS[video_reader_backend](ele)
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(read_video_backend, ele, video_reader_backend)
+            try:
+                video, sample_fps = future.result(timeout=2)
+            except concurrent.futures.TimeoutError:
+                video, sample_fps = _read_video_cv2(ele)
+                logger.warning(f"video_reader_backend {video_reader_backend} timeout, use opencv as alternative")
         except Exception as e:
             logger.warning(f"video_reader_backend {video_reader_backend} error, use torchvision as default, msg: {e}")
             video, sample_fps = VIDEO_READER_BACKENDS["torchvision"](ele)
