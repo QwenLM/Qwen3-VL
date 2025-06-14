@@ -100,6 +100,14 @@ def train(attn_implementation="flash_attention_2"):
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if data_args.data_packing:
+        assert data_args.data_flatten, "data_packing requires data_flatten to be enabled."
+        
+    if data_args.data_flatten or data_args.data_packing:
+        assert attn_implementation == "flash_attention_2", \
+            "data_flatten and data_packing only support 'flash_attention_2' implementation. " \
+            f"Current implementation: '{attn_implementation}'."
+
     local_rank = training_args.local_rank
     os.makedirs(training_args.output_dir, exist_ok=True)
 
