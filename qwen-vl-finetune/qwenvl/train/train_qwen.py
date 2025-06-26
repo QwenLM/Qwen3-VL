@@ -126,6 +126,24 @@ def train(attn_implementation="flash_attention_2"):
         )
         data_args.model_type = "qwen2vl"
 
+    if model_args.lora_enable:
+        from peft import LoraConfig, get_peft_model
+        lora_config = LoraConfig(
+            r=model_args.lora_r,
+            lora_alpha=model_args.lora_alpha,
+            target_modules=model_args.lora_target_modules,
+            lora_dropout=model_args.lora_dropout,
+            bias=model_args.lora_bias,
+            task_type="CAUSAL_LM",
+        )
+        
+        rank0_print("Adding LoRA adapters...")
+        model = get_peft_model(model, lora_config)
+
+    if training_args.bf16:
+        model.to(torch.bfloat16)
+
+
     if data_args.data_flatten:
         replace_qwen2_vl_attention_class()
     model.config.use_cache = False
@@ -147,11 +165,10 @@ def train(attn_implementation="flash_attention_2"):
         padding_side="right",
         use_fast=False,
     )
-    set_model(model_args, model)
 
-    if torch.distributed.get_rank() == 0:
-        model.visual.print_trainable_parameters()
-        model.model.print_trainable_parameters()
+    if model_args.lora_enable is False:
+        set_model(model_args, model)
+
     
     if data_args.data_packing:
         data_module = make_supervised_data_module_packed(tokenizer=tokenizer, data_args=data_args)
