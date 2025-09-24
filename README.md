@@ -61,7 +61,7 @@ Available in Dense and MoE architectures that scale from edge to cloud, with Ins
 
 ## News
 
-* 2025.09.23: We have released the [Qwen3-VL-235B-A22-Instruct](https://huggingface.co/Qwen/Qwen3-VL-235B-A22-Instruct) and [Qwen3-VL-235B-A22-Thinking](https://huggingface.co/Qwen/Qwen3-VL-235B-A22-Thinking). For more details, please check our [blog](https://qwenlm.github.io/blog/qwen3-vl/)!
+* 2025.09.23: We have released the [Qwen3-VL-235B-A22B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Instruct) and [Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Thinking). For more details, please check our [blog](https://qwenlm.github.io/blog/qwen3-vl/)!
 * 2025.04.08: We provide the [code](https://github.com/QwenLM/Qwen2.5-VL/tree/main/qwen-vl-finetune) for fine-tuning Qwen2-VL and Qwen2.5-VL.
 * 2025.03.25: We have released the [Qwen2.5-VL-32B](https://huggingface.co/Qwen/Qwen2.5-VL-32B-Instruct). It is smarter and its responses align more closely with human preferences. For more details, please check our [blog](https://qwenlm.github.io/blog/qwen2.5-vl-32b/)!
 * 2025.02.20: we have released the [Qwen2.5-VL Technical Report](https://arxiv.org/abs/2502.13923). Alongside the report, we have also released AWQ-quantized models for Qwen2.5-VL in three different sizes: [3B](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct-AWQ), [7B](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct-AWQ) , and [72B](https://huggingface.co/Qwen/Qwen2.5-VL-72B-Instruct-AWQ) parameters.
