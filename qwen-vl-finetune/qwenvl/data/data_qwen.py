@@ -444,10 +444,9 @@ class LazySupervisedDataset(Dataset):
             second_per_grid_ts=second_per_grid_ts if second_per_grid_ts else None,
         )
         if "image" not in sources[0] and "video" not in sources[0]:
-            grid_thw_merged = None
             sources = copy.deepcopy([e["conversations"] for e in sources])
             data_dict = preprocess_qwen_2_visual(
-                sources, self.tokenizer, grid_thw=grid_thw_merged
+                sources, self.tokenizer
             )
             position_ids = (
                 torch.arange(0, data_dict["input_ids"].size(1))
