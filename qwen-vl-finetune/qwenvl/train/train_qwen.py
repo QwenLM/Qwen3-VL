@@ -100,7 +100,13 @@ def train(attn_implementation="flash_attention_2"):
     local_rank = training_args.local_rank
     os.makedirs(training_args.output_dir, exist_ok=True)
 
-    if "qwen3" in model_args.model_name_or_path.lower() and "moe" in model_args.model_name_or_path.lower():
+    if len(re.findall(r"A\d+B", model_args.model_name_or_path)) > 0 or "moe" in model_args.model_name_or_path.lower():
+        is_moe = True
+    else:
+        is_moe = False
+    print(f"is_moe architecture: {is_moe}")
+    
+    if "qwen3" in model_args.model_name_or_path.lower() and is_moe:
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
