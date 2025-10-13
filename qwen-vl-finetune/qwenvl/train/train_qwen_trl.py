@@ -75,6 +75,18 @@ class QwenScriptArguments(ScriptArguments):
         default=784,  # ~28x28
         metadata={"help": "Minimum number of pixels for image encoding"}
     )
+    video_fps: float = field(
+        default=2.0,
+        metadata={"help": "FPS for video frame extraction"}
+    )
+    video_max_pixels: int = field(
+        default=50176,  # Can be higher for videos
+        metadata={"help": "Maximum pixels per video frame"}
+    )
+    video_min_pixels: int = field(
+        default=784,
+        metadata={"help": "Minimum pixels per video frame"}
+    )
 
 
 def load_qwen_dataset(dataset_path: str, data_root: str = "") -> Dataset:
@@ -98,7 +110,7 @@ def load_qwen_dataset(dataset_path: str, data_root: str = "") -> Dataset:
     # Convert to TRL format
     converted_data = []
     for item in data:
-        # Handle both single image and multiple images
+        # Handle images
         if "image" in item:
             image_path = os.path.join(data_root, item["image"]) if data_root else item["image"]
             images = [image_path]
@@ -106,6 +118,15 @@ def load_qwen_dataset(dataset_path: str, data_root: str = "") -> Dataset:
             images = [os.path.join(data_root, img) if data_root else img for img in item["images"]]
         else:
             images = []
+
+        # Handle videos
+        if "video" in item:
+            video_path = os.path.join(data_root, item["video"]) if data_root else item["video"]
+            videos = [video_path]
+        elif "videos" in item:
+            videos = [os.path.join(data_root, vid) if data_root else vid for vid in item["videos"]]
+        else:
+            videos = []
 
         # Convert conversations to messages format
         messages = []
@@ -116,10 +137,17 @@ def load_qwen_dataset(dataset_path: str, data_root: str = "") -> Dataset:
                 "content": conv["value"]
             })
 
-        converted_data.append({
-            "images": images,
+        example = {
             "messages": messages
-        })
+        }
+
+        # Add images/videos if present
+        if images:
+            example["images"] = images
+        if videos:
+            example["videos"] = videos
+
+        converted_data.append(example)
 
     return Dataset.from_list(converted_data)
 
@@ -205,10 +233,16 @@ if __name__ == "__main__":
         trust_remote_code=model_args.trust_remote_code,
     )
 
-    # Set processor min/max pixels
+    # Set processor min/max pixels for images
     if hasattr(processor, "image_processor"):
         processor.image_processor.max_pixels = script_args.max_pixels
         processor.image_processor.min_pixels = script_args.min_pixels
+
+    # Set video processing parameters
+    if hasattr(processor, "video_processor"):
+        processor.video_processor.fps = script_args.video_fps
+        processor.video_processor.max_pixels = script_args.video_max_pixels
+        processor.video_processor.min_pixels = script_args.video_min_pixels
 
     ################
     # Dataset
