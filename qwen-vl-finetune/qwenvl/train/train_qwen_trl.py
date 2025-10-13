@@ -36,7 +36,6 @@ Example usage:
 import json
 import os
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 import torch
@@ -61,23 +60,23 @@ class QwenScriptArguments(ScriptArguments):
 
     dataset_path: Optional[str] = field(
         default=None,
-        metadata={"help": "Path to local dataset JSON file (e.g., demo/single_images.json)"}
+        metadata={
+            "help": "Path to local dataset JSON file (e.g., demo/single_images.json)"
+        },
     )
     data_root: Optional[str] = field(
-        default="",
-        metadata={"help": "Root directory for image/video files"}
+        default="", metadata={"help": "Root directory for image/video files"}
     )
     max_pixels: int = field(
         default=50176,  # ~224x224
-        metadata={"help": "Maximum number of pixels for image encoding"}
+        metadata={"help": "Maximum number of pixels for image encoding"},
     )
     min_pixels: int = field(
         default=784,  # ~28x28
-        metadata={"help": "Minimum number of pixels for image encoding"}
+        metadata={"help": "Minimum number of pixels for image encoding"},
     )
     video_fps: float = field(
-        default=2.0,
-        metadata={"help": "FPS for video frame extraction"}
+        default=2.0, metadata={"help": "FPS for video frame extraction"}
     )
 
 
@@ -96,7 +95,7 @@ def load_qwen_dataset(dataset_path: str, data_root: str = "") -> Dataset:
         }
     ]
     """
-    with open(dataset_path, 'r') as f:
+    with open(dataset_path, "r") as f:
         data = json.load(f)
 
     # Convert to TRL format
@@ -104,19 +103,29 @@ def load_qwen_dataset(dataset_path: str, data_root: str = "") -> Dataset:
     for item in data:
         # Handle images
         if "image" in item:
-            image_path = os.path.join(data_root, item["image"]) if data_root else item["image"]
+            image_path = (
+                os.path.join(data_root, item["image"]) if data_root else item["image"]
+            )
             images = [image_path]
         elif "images" in item:
-            images = [os.path.join(data_root, img) if data_root else img for img in item["images"]]
+            images = [
+                os.path.join(data_root, img) if data_root else img
+                for img in item["images"]
+            ]
         else:
             images = []
 
         # Handle videos
         if "video" in item:
-            video_path = os.path.join(data_root, item["video"]) if data_root else item["video"]
+            video_path = (
+                os.path.join(data_root, item["video"]) if data_root else item["video"]
+            )
             videos = [video_path]
         elif "videos" in item:
-            videos = [os.path.join(data_root, vid) if data_root else vid for vid in item["videos"]]
+            videos = [
+                os.path.join(data_root, vid) if data_root else vid
+                for vid in item["videos"]
+            ]
         else:
             videos = []
 
@@ -124,14 +133,9 @@ def load_qwen_dataset(dataset_path: str, data_root: str = "") -> Dataset:
         messages = []
         for conv in item.get("conversations", []):
             role = "user" if conv["from"] == "human" else "assistant"
-            messages.append({
-                "role": role,
-                "content": conv["value"]
-            })
+            messages.append({"role": role, "content": conv["value"]})
 
-        example = {
-            "messages": messages
-        }
+        example = {"messages": messages}
 
         # Add images/videos if present
         if images:
@@ -148,15 +152,10 @@ def format_dataset_for_qwen(example, processor):
     """Format dataset examples for Qwen-VL models."""
     # Process messages and images together
     text = processor.apply_chat_template(
-        example["messages"],
-        tokenize=False,
-        add_generation_prompt=False
+        example["messages"], tokenize=False, add_generation_prompt=False
     )
 
-    return {
-        "text": text,
-        "images": example["images"]
-    }
+    return {"text": text, "images": example["images"]}
 
 
 if __name__ == "__main__":
@@ -173,21 +172,32 @@ if __name__ == "__main__":
     ################
     # Model & Processor
     ################
-    dtype = model_args.dtype if model_args.dtype in ["auto", None] else getattr(torch, model_args.dtype)
+    dtype = (
+        model_args.dtype
+        if model_args.dtype in ["auto", None]
+        else getattr(torch, model_args.dtype)
+    )
 
     # Determine model class based on model name
     # Note: Qwen3-VL-30B-A3B uses MoE architecture (A3B = Active 3B parameters)
-    if "qwen3" in model_args.model_name_or_path.lower() and ("moe" in model_args.model_name_or_path.lower() or "a3b" in model_args.model_name_or_path.lower()):
+    if "qwen3" in model_args.model_name_or_path.lower() and (
+        "moe" in model_args.model_name_or_path.lower()
+        or "a3b" in model_args.model_name_or_path.lower()
+    ):
         from transformers import Qwen3VLMoeForConditionalGeneration
+
         model_class = Qwen3VLMoeForConditionalGeneration
     elif "qwen3" in model_args.model_name_or_path.lower():
         from transformers import Qwen3VLForConditionalGeneration
+
         model_class = Qwen3VLForConditionalGeneration
     elif "qwen2.5" in model_args.model_name_or_path.lower():
         from transformers import Qwen2_5_VLForConditionalGeneration
+
         model_class = Qwen2_5_VLForConditionalGeneration
     else:
         from transformers import Qwen2VLForConditionalGeneration
+
         model_class = Qwen2VLForConditionalGeneration
 
     model_kwargs = dict(
@@ -208,7 +218,7 @@ if __name__ == "__main__":
     model = model_class.from_pretrained(
         model_args.model_name_or_path,
         trust_remote_code=model_args.trust_remote_code,
-        **model_kwargs
+        **model_kwargs,
     )
 
     # Enable MoE auxiliary loss for MoE models
@@ -216,8 +226,10 @@ if __name__ == "__main__":
     is_moe_model = "moe" in model_class.__name__.lower()
     if is_moe_model:
         model.config.output_router_logits = True
-        print(f"✓ Enabled MoE auxiliary loss (output_router_logits=True)")
-        print(f"  TRL will automatically include router load balancing loss in training")
+        print("✓ Enabled MoE auxiliary loss (output_router_logits=True)")
+        print(
+            "  TRL will automatically include router load balancing loss in training"
+        )
 
     # Load processor
     processor = AutoProcessor.from_pretrained(
@@ -246,9 +258,15 @@ if __name__ == "__main__":
     else:
         # Load from HuggingFace Hub
         print(f"Loading dataset: {script_args.dataset_name}")
-        dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
+        dataset = load_dataset(
+            script_args.dataset_name, name=script_args.dataset_config
+        )
         train_dataset = dataset[script_args.dataset_train_split]
-        eval_dataset = dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None
+        eval_dataset = (
+            dataset[script_args.dataset_test_split]
+            if training_args.eval_strategy != "no"
+            else None
+        )
 
     print(f"Train dataset size: {len(train_dataset)}")
     if eval_dataset:
