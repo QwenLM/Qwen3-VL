@@ -44,4 +44,3 @@ class TrainingArguments(transformers.TrainingArguments):
     )
     mm_projector_lr: Optional[float] = None
     vision_tower_lr: Optional[float] = None
-    bf16: bool = field(default=False, metadata={"help": "Whether to use bfloat16 (mixed precision) training."})
