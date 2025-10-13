@@ -79,14 +79,6 @@ class QwenScriptArguments(ScriptArguments):
         default=2.0,
         metadata={"help": "FPS for video frame extraction"}
     )
-    video_max_pixels: int = field(
-        default=50176,  # Can be higher for videos
-        metadata={"help": "Maximum pixels per video frame"}
-    )
-    video_min_pixels: int = field(
-        default=784,
-        metadata={"help": "Minimum pixels per video frame"}
-    )
 
 
 def load_qwen_dataset(dataset_path: str, data_root: str = "") -> Dataset:
@@ -241,8 +233,6 @@ if __name__ == "__main__":
     # Set video processing parameters
     if hasattr(processor, "video_processor"):
         processor.video_processor.fps = script_args.video_fps
-        processor.video_processor.max_pixels = script_args.video_max_pixels
-        processor.video_processor.min_pixels = script_args.video_min_pixels
 
     ################
     # Dataset
