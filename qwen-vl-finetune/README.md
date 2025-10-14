@@ -380,7 +380,6 @@ python qwenvl/train/train_qwen_trl.py \
 ```
 
 **Key TRL Arguments:**
-- `--data_root`: Root directory for image/video files (optional if paths in JSON are absolute)
 - `--max_length`: Maximum sequence length (default: 1024). Use 20000+ for videos
 - `--max_pixels` / `--min_pixels`: Image resolution control (default: 50176/784)
 - `--use_peft`: Enable LoRA training
