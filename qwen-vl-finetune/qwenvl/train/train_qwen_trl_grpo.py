@@ -257,10 +257,9 @@ if __name__ == "__main__":
     dataset = load_dataset("lmms-lab/multimodal-open-r1-8k-verified", split="train")
 
     SYSTEM_PROMPT = (
-        "A conversation between user and assistant. The user asks a question, and the assistant solves it. The "
-        "assistant first thinks about the reasoning process in the mind and then provides the user with the answer. "
-        "The reasoning process and answer are enclosed within <think></think> tags, i.e., <think>\nThis is my "
-        "reasoning.\n</think>\nThis is my answer."
+        "You are a helpful AI Assistant that provides well-reasoned and detailed responses. "
+        "You first think about the reasoning process as an internal monologue and then provide the user with the answer. "
+        "Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"
     )
 
     def make_conversation(example):
