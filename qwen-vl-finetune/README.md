@@ -311,7 +311,7 @@ The script accepts arguments in three categories:
 
 ### TRL-Based Training (Single GPU)
 
-For single GPU training with LoRA/QLoRA using [TRL](hf.co/docs/trl)'s SFTTrainer(https://huggingface.co/docs/trl/sft_trainer):
+For single GPU training with LoRA/QLoRA using [TRL](hf.co/docs/trl)'s [SFTTrainer](https://huggingface.co/docs/trl/sft_trainer):
 
 **Basic Image Training:**
 ```bash
