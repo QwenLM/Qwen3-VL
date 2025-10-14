@@ -2,10 +2,10 @@
 #
 # This script will automatically pull docker image from DockerHub, and start a daemon container to run the Qwen-Chat web-demo.
 
-IMAGE_NAME=qwenllm/qwenvl:2.5-cu121
-QWEN_CHECKPOINT_PATH=/path/to/Qwen2.5-VL-7B-Instruct
+IMAGE_NAME=qwenllm/qwenvl:qwen3vl-cu128
+QWEN_CHECKPOINT_PATH='Qwen/Qwen3-VL-235B-A22B-Instruct'
 PORT=8901
-CONTAINER_NAME=qwen2.5-vl
+CONTAINER_NAME=qwen3vl
 
 function usage() {
     echo '
@@ -55,9 +55,9 @@ sudo docker pull ${IMAGE_NAME} || {
 
 sudo docker run --gpus all -d --restart always --name ${CONTAINER_NAME} \
     -v /var/run/docker.sock:/var/run/docker.sock -p ${PORT}:80 \
-    --mount type=bind,source=${QWEN_CHECKPOINT_PATH},target=/data/shared/Qwen/Qwen2.5-VL-Instruct \
+    --mount type=bind,source=${QWEN_CHECKPOINT_PATH},target=/data/shared/Qwen/checkpoint \
     -it ${IMAGE_NAME} \
-    python web_demo_mm.py --server-port 80 --server-name 0.0.0.0 -c /data/shared/Qwen/Qwen2.5-VL-Instruct/ && {
+    python web_demo_mm.py --server-port 80 --server-name 0.0.0.0 -c /data/shared/Qwen/checkpoint/ && {
     echo "Successfully started web demo. Open 'http://localhost:${PORT}' to try!
 Run \`docker logs ${CONTAINER_NAME}\` to check demo status.
 Run \`docker rm -f ${CONTAINER_NAME}\` to stop and remove the demo."

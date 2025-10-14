@@ -1,80 +1,87 @@
-import os
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple, Callable
 
-import datasets
 import torch
-import torch.nn as nn
 from flash_attn.flash_attn_interface import flash_attn_varlen_func
-from torch.utils.data import DataLoader, Sampler
+from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers import Trainer
 from transformers.cache_utils import Cache
+from transformers.utils.deprecation import deprecate_kwarg
+from transformers.processing_utils import Unpack
+from transformers.models.qwen2_vl.modeling_qwen2_vl import (
+    Qwen2VisionTransformerPretrainedModel,
+    Qwen2VLModel,
+    apply_multimodal_rotary_pos_emb,
+)
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLModel,
 )
-from transformers.models.qwen2_vl.modeling_qwen2_vl import (
-    Qwen2VisionTransformerPretrainedModel,
-    Qwen2VLModel,
+from transformers.models.qwen3_vl.modeling_qwen3_vl import (
+    Qwen3VLVisionModel,
+    Qwen3VLModel,
+    apply_rotary_pos_emb,
 )
-from transformers.trainer import (
-    ALL_LAYERNORM_LAYERS,
-    get_parameter_names,
-    has_length,
-    is_sagemaker_mp_enabled,
+from transformers.models.qwen3_vl_moe.modeling_qwen3_vl_moe import (
+    Qwen3VLMoeVisionModel,
+    Qwen3VLMoeModel,
 )
-from transformers.trainer_utils import seed_worker
+from transformers.utils import logging
+
+logger = logging.get_logger(__name__)
 
 
-def _flash_attention_forward(
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
-    attention_mask: torch.Tensor,
-    query_length: int,
-    is_causal: bool,
+def flash_attention_forward(
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
-    position_ids: Optional[torch.Tensor] = None,
-    softmax_scale: Optional[float] = None,
+    scaling: Optional[float] = None,
     sliding_window: Optional[int] = None,
-    use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
-    deterministic: bool = None,
-    cu_seq_lens_q: Optional[torch.LongTensor] = None,
-    cu_seq_lens_k: Optional[torch.LongTensor] = None,
-    max_length_q: Optional[int] = None,
-    max_length_k: Optional[int] = None,
-    target_dtype: Optional[torch.dtype] = None,
     **kwargs,
-):
-    """
-    Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-    first unpad the input, then computes the attention scores and pad the final attention scores.
+) -> tuple[torch.Tensor, None]:
+    if kwargs.get("output_attentions", False) or kwargs.get("head_mask") is not None:
+        logger.warning_once(
+            "`flash_attention_2` does not support `output_attentions=True` or `head_mask`."
+            " Please set your attention to `eager` if you want any of these features."
+        )
+    
+    # This is before the transpose
+    seq_len = query.shape[2]
 
-    Args:
-        query_states (`torch.Tensor`):
-            Input query states to be passed to Flash Attention API
-        key_states (`torch.Tensor`):
-            Input key states to be passed to Flash Attention API
-        value_states (`torch.Tensor`):
-            Input value states to be passed to Flash Attention API
-        attention_mask (`torch.Tensor`):
-            The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-            position of padding tokens and 1 for the position of non-padding tokens.
-        dropout (`float`):
-            Attention dropout
-        softmax_scale (`float`, *optional*):
-            The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-        use_top_left_mask (`bool`, defaults to `False`):
-            flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference.
-        softcap (`float`, *optional*):
-            Softcap for the attention logits, used e.g. in gemma2.
-        deterministic (`bool`, *optional*):
-            Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
-    """
-    assert query_states.size(0) == key_states.size(0) == value_states.size(0) == 1
-    query_states = query_states.squeeze(0)
-    key_states = key_states.squeeze(0)
-    value_states = value_states.squeeze(0)
+    if any(dim == 0 for dim in query.shape):
+        raise ValueError(
+            "Tensor query has shape  with a zero dimension.\n"
+            "FlashAttention does not support inputs with dim=0.\n"
+            "Please check your input shapes or use SDPA instead."
+        )
+    # FA2 uses non-transposed inputs
+    # batch, head, seq_len, dim
+    query = query.transpose(1, 2)
+    key = key.transpose(1, 2)
+    value = value.transpose(1, 2)
+    # batch, seqlen, head, dim
+
+    # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+    # therefore the input hidden states gets silently casted in float32. Hence, we need
+    # cast them back in the correct dtype just to be sure everything works as expected.
+    # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+    # in fp32. (usually our RMSNorm modules handle it correctly)
+    target_dtype = None
+    if query.dtype == torch.float32:
+        if torch.is_autocast_enabled():
+            target_dtype = torch.get_autocast_gpu_dtype()
+        # Handle the case where the model is quantized
+        elif hasattr(module.config, "_pre_quantization_dtype"):
+            target_dtype = module.config._pre_quantization_dtype
+        else:
+            target_dtype = next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
+
+    query = query.squeeze(0)
+    key = key.squeeze(0)
+    value = value.squeeze(0)
     cu_seqlens = attention_mask
 
     with torch.no_grad():
@@ -85,47 +92,122 @@ def _flash_attention_forward(
             ]
         ).item()
 
-    if not use_top_left_mask:
-        causal = is_causal
-    else:
-        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1.
-        causal = is_causal and query_length != 1
-
-    # Assuming 4D tensors, key_states.shape[1] is the key/value sequence length (source length).
-    flash_kwargs = {}
-
-    if softcap is not None:
-        flash_kwargs["softcap"] = softcap
-
     attn_output = flash_attn_varlen_func(
-        query_states,
-        key_states,
-        value_states,
+        query,
+        key,
+        value,
         cu_seqlens_q=cu_seqlens,
         cu_seqlens_k=cu_seqlens,
         max_seqlen_q=max_seqlen,
         max_seqlen_k=max_seqlen,
-        dropout_p=dropout,
-        softmax_scale=softmax_scale,
-        causal=causal,
-        **flash_kwargs,
+        causal=True,
     )
 
     attn_output = attn_output.unsqueeze(0)
-    query_states = query_states.unsqueeze(0)
-    key_states = key_states.unsqueeze(0)
-    value_states = value_states.unsqueeze(0)
 
-    return attn_output
+    return attn_output, None
 
 
-def _update_causal_mask(
+@deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+def qwen2vl_forward(
     self,
-    attention_mask: torch.Tensor,
-    input_tensor: torch.Tensor,
-    cache_position: torch.Tensor,
-    past_key_values: Cache,
-    output_attentions: bool,
+    hidden_states: torch.Tensor,
+    attention_mask: Optional[torch.Tensor] = None,
+    position_ids: Optional[torch.LongTensor] = None,
+    past_key_values: Optional[Cache] = None,
+    output_attentions: bool = False,
+    use_cache: bool = False,
+    cache_position: Optional[torch.LongTensor] = None,
+    position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+    **kwargs: Unpack[FlashAttentionKwargs],
+) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    bsz, q_len, _ = hidden_states.size()
+
+    query_states = self.q_proj(hidden_states)
+    key_states = self.k_proj(hidden_states)
+    value_states = self.v_proj(hidden_states)
+
+    query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+    key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+    value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+
+    cos, sin = position_embeddings
+    query_states, key_states = apply_multimodal_rotary_pos_emb(
+        query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+    )
+
+    if past_key_values is not None:
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
+        key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+    attn_output, attn_weights = flash_attention_forward(
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        dropout=0.0 if not self.training else self.attention_dropout,
+        scaling=self.scaling,
+        sliding_window=self.sliding_window,
+        position_ids=position_ids,  # pass positions for FA2
+        **kwargs,
+    )
+
+    attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+    attn_output = self.o_proj(attn_output)
+    return attn_output, attn_weights
+
+
+
+@deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+def qwen3vl_forward(
+    self,
+    hidden_states: torch.Tensor,
+    position_embeddings: tuple[torch.Tensor, torch.Tensor],
+    attention_mask: Optional[torch.Tensor],
+    past_key_values: Optional[Cache] = None,
+    cache_position: Optional[torch.LongTensor] = None,
+    **kwargs: Unpack[FlashAttentionKwargs],
+) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    input_shape = hidden_states.shape[:-1]
+    hidden_shape = (*input_shape, -1, self.head_dim)
+
+    query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+    key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+    value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+    cos, sin = position_embeddings
+    query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+    if past_key_values is not None:
+        # sin and cos are specific to RoPE models; cache_position needed for the static cache
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+        key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+    attn_output, attn_weights = flash_attention_forward(
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        dropout=0.0 if not self.training else self.attention_dropout,
+        scaling=self.scaling,
+        **kwargs,
+    )
+
+    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+    attn_output = self.o_proj(attn_output)
+    return attn_output, attn_weights
+
+
+def return_mask(
+    config,
+    input_embeds,
+    attention_mask,
+    cache_position,
+    past_key_values,
+    position_ids,
+    **kwargs
 ):
     return attention_mask
 
@@ -134,17 +216,39 @@ def replace_qwen2_vl_attention_class():
     import transformers
     import transformers.modeling_flash_attention_utils
 
-    transformers.models.qwen2_vl.modeling_qwen2_vl._flash_attention_forward = (
-        _flash_attention_forward
+
+    transformers.models.qwen2_vl.modeling_qwen2_vl.Qwen2VLAttention.forward = (
+        qwen2vl_forward
     )
-    transformers.models.qwen2_vl.modeling_qwen2_vl.Qwen2VLModel._update_causal_mask = (
-        _update_causal_mask
+    transformers.models.qwen2_vl.modeling_qwen2_vl.create_causal_mask = (
+        return_mask
     )
-    transformers.models.qwen2_5_vl.modeling_qwen2_5_vl._flash_attention_forward = (
-        _flash_attention_forward
+    transformers.models.qwen2_vl.modeling_qwen2_vl.create_sliding_window_causal_mask = (
+        return_mask
+    )    
+    ## qwen2_5_vl
+    transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLAttention.forward = (
+        qwen2vl_forward
     )
-    transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLModel._update_causal_mask = (
-        _update_causal_mask
+    transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.create_causal_mask = (
+        return_mask
+    )
+    transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.create_sliding_window_causal_mask = (
+        return_mask
+    )
+    ## qwen3vl
+    transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLTextAttention.forward = (
+        qwen3vl_forward
+    )
+    transformers.models.qwen3_vl.modeling_qwen3_vl.create_causal_mask = (
+        return_mask
+    )
+    ## qwen3vl moe
+    transformers.models.qwen3_vl_moe.modeling_qwen3_vl_moe.Qwen3VLMoeTextAttention.forward = (
+        qwen3vl_forward
+    )
+    transformers.models.qwen3_vl_moe.modeling_qwen3_vl_moe.create_causal_mask = (
+        return_mask
     )
 
 
@@ -185,7 +289,7 @@ def print_trainable_parameters(self) -> None:
     """
     # Check embed_tokens
     is_embed_trainable = any(
-        param.requires_grad for param in self.embed_tokens.parameters()
+        param.requires_grad for param in self.language_model.embed_tokens.parameters()
     )
     print(f"LLM Module - Embed Tokens Trainable: {is_embed_trainable}")
 
@@ -193,7 +297,7 @@ def print_trainable_parameters(self) -> None:
     trainable_layers = []
     non_trainable_layers = []
 
-    for layer_idx, layer in enumerate(self.layers):
+    for layer_idx, layer in enumerate(self.language_model.layers):
         is_trainable = any(param.requires_grad for param in layer.parameters())
         if is_trainable:
             trainable_layers.append(layer_idx)
@@ -214,7 +318,7 @@ def create_optimizer(self):
     opt_model = self.model
 
     if self.optimizer is None:
-        decay_parameters = get_parameter_names(opt_model, ALL_LAYERNORM_LAYERS)
+        decay_parameters = self.get_decay_parameter_names(opt_model)
         decay_parameters = [name for name in decay_parameters if "bias" not in name]
         if self.args.mm_projector_lr is not None and self.args.mm_projector_lr != 0:
             projector_parameters = [
@@ -398,3 +502,10 @@ Qwen2_5_VisionTransformerPretrainedModel.print_trainable_parameters = (
     print_trainable_parameters_visual
 )
 Qwen2_5_VLModel.print_trainable_parameters = print_trainable_parameters
+
+Qwen3VLVisionModel.print_trainable_parameters = (
+    print_trainable_parameters_visual
+)
+Qwen3VLModel.print_trainable_parameters = print_trainable_parameters
+Qwen3VLMoeVisionModel.print_trainable_parameters = print_trainable_parameters_visual
+Qwen3VLMoeModel.print_trainable_parameters = print_trainable_parameters

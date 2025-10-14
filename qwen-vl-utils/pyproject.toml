@@ -1,6 +1,6 @@
 [project]
 name = "qwen-vl-utils"
-version = "0.0.11"
+version = "0.0.14"
 description = "Qwen Vision Language Model Utils - PyTorch"
 authors = [
     { name = "Qwen Team", email = "chenkeqin.ckq@alibaba-inc.com" },

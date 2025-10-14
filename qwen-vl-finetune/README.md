@@ -16,8 +16,7 @@ The `qwenvl` directory contains the following components:
 
 ### `data/`
 - `__init__.py`: Contains datasets configs
-- `data_qwen.py`: Data processing module for QwenVL models
-- `data_qwen_packed.py`: Packed data processing module for QwenVL models
+- `data_processor.py`: Data processing module for QwenVL models
 - `rope2d.py`: Provide RoPE implementation
 
 ### `tools`
@@ -30,11 +29,11 @@ You could use follow version of packages:
 
 - `torch==2.6.0`
 - `torchvision==0.21.0`
-- `transformers==4.50.0.dev0`
-- `deepspeed==0.16.4`
+- `transformers==4.57.0.dev0`
+- `deepspeed==0.17.1`
 - `flash_attn==2.7.4.post1`
-- `triton==3.0.0`
-- `accelerate==1.4.0`
+- `triton==3.2.0`
+- `accelerate==1.7.0`
 - `torchcodec==0.2`
 
 ## Custom Dataset Configuration
@@ -72,7 +71,7 @@ The customized data should have the format like:
 2. **Multi-Image Example**:
 ```json
 {
-    "images": ["cats/001.jpg", "cats/002.jpg"],
+    "image": ["cats/001.jpg", "cats/002.jpg"],
     "conversations": [
         {
             "from": "human",
@@ -278,11 +277,11 @@ torchrun --nproc_per_node=$NPROC_PER_NODE \
          --max_pixels 576\*28\*28 \               # [DataArguments] Max image pixels (H*W) for image
          --min_pixels 16\*28\*28 \                # [DataArguments] Min image pixels for image
          # Video Processing
-         --base_interval 2 \                      # [DataArguments] Sampling time interval (seconds) between frames
+         --video_fps 2 \                          # [DataArguments] video fps
          --video_max_frames 8 \                   # [DataArguments] Max frames per video
          --video_min_frames 4 \                   # [DataArguments] Min frames per video
-         --video_max_frame_pixels 1664\*28\*28 \  # [DataArguments] Max pixels within a frame
-         --video_min_frame_pixels 256\*28\*28 \   # [DataArguments] Min pixels within a frame
+         --video_max_pixels 1664\*28\*28 \        # [DataArguments] Max pixels per video
+         --video_min_pixels 256\*28\*28 \         # [DataArguments] Min pixels per video
          
          # Training Schedule
          --num_train_epochs 3 \              # Total training epochs
@@ -308,4 +307,5 @@ The script accepts arguments in three categories:
    - Training resolution is critical for the model performances, hence `--max_pixels` and `--min_pixels` should be properly set
    - Training with Qwen2.5-VL-32B model, you should have 8 80G GPU refering to `scripts/sft_32b.sh`
    - `"_attn_implementation": "flash_attention_2",` could be add in the config.json of the model to use flash attention.
+   - The Qwen3VL MoE model does not support DeepSpeed with ZeRO-3. Additionally, Hugging Face’s official implementation does not include support for load balancing loss currently.
 
