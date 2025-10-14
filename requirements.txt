@@ -1,0 +1,7 @@
+# Core dependencies
+transformers==4.57.0
+accelerate==1.10.1
+
+# Optional dependency
+# Uncomment the following line if you need flash-attn
+# flash-attn
