@@ -90,52 +90,77 @@ def format_reward(completions, **kwargs):
     return rewards
 
 
+def len_reward(completions, solution, **kwargs) -> float:
+    """Compute length-based rewards to discourage overthinking and promote token efficiency.
 
-def accuracy_reward(completions: list[list[dict[str, str]]], solution: list[str], **kwargs) -> list[Optional[float]]:
-    """Reward function that checks if the completion matches the ground truth.
-    - If both gold and prediction are parseable → use math verification.
-    - If not parseable → compare as normalized text.
+    Taken from the Kimi 1.5 tech report: https://huggingface.co/papers/2501.12599
+
+    Args:
+        completions: List of model completions
+        solution: List of ground truth solutions
+
+    Returns:
+        List of rewards where:
+        - For correct answers: reward = 0.5 - (len - min_len)/(max_len - min_len)
+        - For incorrect answers: reward = min(0, 0.5 - (len - min_len)/(max_len - min_len))
     """
-    rewards = []
+    contents = completions
 
-    for completion, sol in zip(completions, solution):
-        try:
-            gold_parsed = parse(sol, extraction_mode="first_match")
-        except Exception as e:
-            gold_parsed = []
+    # First check correctness of answers
+    correctness = []
+    for content, sol in zip(contents, solution):
+        gold_parsed = parse(
+            sol,
+            extraction_mode="first_match",
+            extraction_config=[LatexExtractionConfig()],
+        )
+        if len(gold_parsed) == 0:
+            # Skip unparseable examples
+            correctness.append(True)  # Treat as correct to avoid penalizing
+            print("Failed to parse gold solution: ", sol)
+            continue
 
-        if len(gold_parsed) != 0:
-            # Try parsing predicted answer too
-            try:
-                answer_parsed = parse(
-                    completion,
-                    extraction_config=[
-                        LatexExtractionConfig(
-                            normalization_config=NormalizationConfig(
-                                nits=False,
-                                malformed_operators=False,
-                                basic_latex=True,
-                                boxed="all",
-                                units=True,
-                            ),
-                            boxed_match_priority=0,
-                            try_extract_without_anchor=False,
-                        )
-                    ],
-                    extraction_mode="first_match",
+        answer_parsed = parse(
+            content,
+            extraction_config=[
+                LatexExtractionConfig(
+                    normalization_config=NormalizationConfig(
+                        nits=False,
+                        malformed_operators=False,
+                        basic_latex=True,
+                        equations=True,
+                        boxed=True,
+                        units=True,
+                    ),
+                    boxed_match_priority=0,
+                    try_extract_without_anchor=False,
                 )
-                reward = float(verify(gold_parsed, answer_parsed))
-            except Exception as e:
-                print(f"verify failed: {e}, answer: {completion}, gold: {sol}")
-                reward = None
-        else:
-            # fallback to text match
-            reward = float(completion.strip().lower() == sol.strip().lower())
+            ],
+            extraction_mode="first_match",
+        )
+        correctness.append(verify(answer_parsed, gold_parsed))
 
-        rewards.append(reward)
+    # Calculate lengths
+    lengths = [len(content) for content in contents]
+    min_len = min(lengths)
+    max_len = max(lengths)
+
+    # If all responses have the same length, return zero rewards
+    if max_len == min_len:
+        return [0.0] * len(completions)
+
+    rewards = []
+    for length, is_correct in zip(lengths, correctness):
+        lambda_val = 0.5 - (length - min_len) / (max_len - min_len)
+
+        if is_correct:
+            reward = lambda_val
+        else:
+            reward = min(0, lambda_val)
+
+        rewards.append(float(reward))
 
     return rewards
-
 
 if __name__ == "__main__":
     # Parse arguments
@@ -283,7 +308,7 @@ if __name__ == "__main__":
     ################
     trainer = GRPOTrainer(
         model=model,
-        reward_funcs=[format_reward],
+        reward_funcs=[format_reward, len_reward],
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
