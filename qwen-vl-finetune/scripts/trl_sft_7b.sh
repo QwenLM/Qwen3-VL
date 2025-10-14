@@ -63,7 +63,7 @@ echo "Using LoRA: $USE_LORA"
 echo "========================================"
 
 # Build command
-CMD="python qwenvl/train/train_qwen_trl.py \
+CMD="python qwenvl/train/train_qwen_trl_sft.py‎ \
     --model_name_or_path $MODEL_PATH \
     --output_dir $OUTPUT_DIR \
     --run_name $RUN_NAME"
