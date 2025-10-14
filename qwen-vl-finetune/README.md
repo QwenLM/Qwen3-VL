@@ -317,7 +317,7 @@ You can fine-tune the models using the [Transformer Reinforcement Learning (TRL)
 
 For single GPU training with LoRA/QLoRA using [SFTTrainer](https://huggingface.co/docs/trl/sft_trainer):
 
-**Basic Image Training:**
+**Basic Image Training: using [PEFT](https://huggingface.co/docs/peft/en/index)**
 ```bash
 python qwenvl/train/train_qwen_trl_sft.py \
     --model_name_or_path Qwen/Qwen3-VL-8B-Instruct \
@@ -339,7 +339,7 @@ python qwenvl/train/train_qwen_trl_sft.py \
     --report_to none
 ```
 
-**QLoRA Training (4-bit quantization):**
+**QLoRA Training (4-bit quantization): using [bitsandbytes](https://huggingface.co/docs/bitsandbytes/main/en/index)**
 ```bash
 python qwenvl/train/train_qwen_trl_sft.py \
     --model_name_or_path Qwen/Qwen3-VL-8B-Instruct \
