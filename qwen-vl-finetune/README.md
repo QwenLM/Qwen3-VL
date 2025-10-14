@@ -307,5 +307,120 @@ The script accepts arguments in three categories:
    - Training resolution is critical for the model performances, hence `--max_pixels` and `--min_pixels` should be properly set
    - Training with Qwen2.5-VL-32B model, you should have 8 80G GPU refering to `scripts/sft_32b.sh`
    - `"_attn_implementation": "flash_attention_2",` could be add in the config.json of the model to use flash attention.
-   - The Qwen3VL MoE model does not support DeepSpeed with ZeRO-3. Additionally, Hugging Face’s official implementation does not include support for load balancing loss currently.
+   - The Qwen3VL MoE model does not support DeepSpeed with ZeRO-3. Additionally, Hugging Face's official implementation does not include support for load balancing loss currently.
+
+### TRL-Based Training (Single GPU)
+
+For single GPU training with LoRA/QLoRA using [TRL](hf.co/docs/trl)'s SFTTrainer(https://huggingface.co/docs/trl/sft_trainer):
+
+**Basic Image Training:**
+```bash
+python qwenvl/train/train_qwen_trl.py \
+    --model_name_or_path Qwen/Qwen3-VL-4B-Instruct \
+    --dataset_path demo/single_images.json \
+    --output_dir ./output/qwen-vl-4b-lora \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 4 \
+    --num_train_epochs 1 \
+    --learning_rate 2e-5 \
+    --bf16 \
+    --gradient_checkpointing \
+    --use_peft \
+    --lora_r 64 \
+    --lora_alpha 16 \
+    --lora_target_modules all-linear \
+    --max_pixels 50176 \
+    --min_pixels 784 \
+    --logging_steps 10 \
+    --report_to none
+```
+
+**Video Training:**
+```bash
+# Note: Videos require larger max_length to avoid truncation
+python qwenvl/train/train_qwen_trl.py \
+    --model_name_or_path Qwen/Qwen3-VL-4B-Instruct \
+    --dataset_path demo/video.json \
+    --data_root demo/videos \
+    --output_dir ./output/qwen-vl-4b-video \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 4 \
+    --num_train_epochs 1 \
+    --learning_rate 2e-5 \
+    --bf16 \
+    --gradient_checkpointing \
+    --use_peft \
+    --lora_r 64 \
+    --lora_alpha 16 \
+    --lora_target_modules all-linear \
+    --max_length 20000 \
+    --video_fps 2.0 \
+    --logging_steps 10 \
+    --report_to none
+```
+
+**QLoRA Training (4-bit quantization):**
+```bash
+python qwenvl/train/train_qwen_trl.py \
+    --model_name_or_path Qwen/Qwen3-VL-4B-Instruct \
+    --dataset_path demo/single_images.json \
+    --output_dir ./output/qwen-vl-4b-qlora \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 4 \
+    --num_train_epochs 1 \
+    --learning_rate 2e-5 \
+    --fp16 \
+    --gradient_checkpointing \
+    --use_peft \
+    --lora_r 64 \
+    --lora_alpha 16 \
+    --lora_target_modules all-linear \
+    --load_in_4bit \
+    --bnb_4bit_quant_type nf4 \
+    --use_bnb_nested_quant \
+    --logging_steps 10 \
+    --report_to none
+```
+
+**With [Liger Kernel](https://github.com/linkedin/Liger-Kernel) (optimized training):**
+```bash
+python qwenvl/train/train_qwen_trl.py \
+    --model_name_or_path Qwen/Qwen3-VL-4B-Instruct \
+    --dataset_path demo/single_images.json \
+    --output_dir ./output/qwen-vl-4b-liger \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 4 \
+    --num_train_epochs 1 \
+    --learning_rate 2e-5 \
+    --bf16 \
+    --gradient_checkpointing \
+    --use_peft \
+    --lora_r 64 \
+    --lora_alpha 16 \
+    --lora_target_modules all-linear \
+    --use_liger \
+    --logging_steps 10 \
+    --report_to none
+```
+
+**Key TRL Arguments:**
+- `--dataset_path`: Path to local JSON dataset file
+- `--data_root`: Root directory for image/video files (optional if paths in JSON are absolute)
+- `--max_length`: Maximum sequence length (default: 1024). Use 20000+ for videos
+- `--max_pixels` / `--min_pixels`: Image resolution control (default: 50176/784)
+- `--video_fps`: Video frame sampling rate (default: 2.0)
+- `--use_peft`: Enable LoRA training
+- `--lora_r`: LoRA rank (higher = more parameters)
+- `--lora_alpha`: LoRA scaling factor
+- `--lora_target_modules`: Which modules to apply LoRA to (`all-linear` recommended)
+- `--load_in_4bit`: Enable 4-bit quantization (QLoRA)
+- `--bnb_4bit_quant_type`: Quantization type (`nf4` or `fp4`)
+- `--use_bnb_nested_quant`: Enable nested quantization for better quality
+- `--use_liger`: Enable Liger kernel optimizations
+
+**Notes:**
+- The default `max_length=1024` works for images but videos need `max_length=20000` or higher to avoid truncation.
+- QLoRA (`--load_in_4bit`) significantly reduces memory usage, enabling training on GPUs with less VRAM.
+- Liger kernel (`--use_liger`) provides optimized kernels for faster training.
+- MoE models (Qwen3-VL-30B-A3B) automatically enable auxiliary/load balancing loss when detected.
 
