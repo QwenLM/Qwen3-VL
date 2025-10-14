@@ -311,11 +311,15 @@ The script accepts arguments in three categories:
 
 ### TRL-Based Training (Single GPU)
 
-For single GPU training with LoRA/QLoRA using [TRL](hf.co/docs/trl)'s [SFTTrainer](https://huggingface.co/docs/trl/sft_trainer):
+You can fine-tune the models using the [Transformer Reinforcement Learning (TRL)](https://hf.co/docs/trl) library by Hugging Face with SFT or GRPO.
+
+#### Using SFT
+
+For single GPU training with LoRA/QLoRA using [SFTTrainer](https://huggingface.co/docs/trl/sft_trainer):
 
 **Basic Image Training:**
 ```bash
-python qwenvl/train/train_qwen_trl.py \
+python qwenvl/train/train_qwen_trl_sft.py \
     --model_name_or_path Qwen/Qwen2.5-VL-7B-Instruct \
     --dataset_name trl-lib/llava-instruct-mix \
     --output_dir ./output/qwen-vl-4b-lora \
@@ -337,7 +341,7 @@ python qwenvl/train/train_qwen_trl.py \
 
 **QLoRA Training (4-bit quantization):**
 ```bash
-python qwenvl/train/train_qwen_trl.py \
+python qwenvl/train/train_qwen_trl_sft.py \
     --model_name_or_path Qwen/Qwen2.5-VL-7B-Instruct \
     --dataset_name trl-lib/llava-instruct-mix \
     --output_dir ./output/qwen-vl-4b-qlora \
@@ -360,7 +364,7 @@ python qwenvl/train/train_qwen_trl.py \
 
 **With [Liger Kernel](https://github.com/linkedin/Liger-Kernel) (optimized training):**
 ```bash
-python qwenvl/train/train_qwen_trl.py \
+python qwenvl/train/train_qwen_trl_sft.py \
     --model_name_or_path Qwen/Qwen2.5-VL-7B-Instruct \
     --dataset_name trl-lib/llava-instruct-mix \
     --output_dir ./output/qwen-vl-4b-liger \
@@ -396,3 +400,27 @@ python qwenvl/train/train_qwen_trl.py \
 - Liger kernel (`--use_liger`) provides optimized kernels for faster training.
 - MoE models (Qwen3-VL-30B-A3B) automatically enable auxiliary/load balancing loss when detected.
 
+#### Using GRPO
+
+For single GPU training with LoRA/QLoRA using [GRPOTrainer](https://huggingface.co/docs/trl/grpo_trainer):
+
+```bash
+python qwenvl/train/train_qwen_trl_grpo.py \
+    --model_name_or_path Qwen/Qwen2.5-VL-7B-Instruct \
+    --output_dir ./output/qwen-vl-7b-trl \
+    --per_device_train_batch_size 2 \
+    --per_device_train_batch_size 8 \
+    --max_completion_length 1024 \
+    --num_generations 8 \
+    --max_prompt_length 2048 \
+    --gradient_accumulation_steps 8 \
+    --num_train_epochs 1 \
+    --learning_rate 2e-5 \
+    --bf16 True \
+    --gradient_checkpointing True \
+    --use_peft True \
+    --lora_r 8 \
+    --lora_alpha 32 \
+    --lora_target_modules "q_proj", "v_proj" \
+    --log_completions
+```
