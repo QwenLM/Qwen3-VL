@@ -20,7 +20,7 @@ pip install math_verify
 
 Example usage:
     python qwenvl/train/train_qwen_trl_grpo.py \
-        --model_name_or_path Qwen/Qwen2.5-VL-7B-Instruct \
+        --model_name_or_path Qwen/Qwen3-VL-8B-Instruct \
         --output_dir ./output/qwen-vl-7b-trl \
         --per_device_train_batch_size 2 \
         --per_device_train_batch_size 8 \
