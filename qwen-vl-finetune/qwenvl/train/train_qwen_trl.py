@@ -19,10 +19,10 @@ Training script for Qwen-VL models using TRL's SFTTrainer.
 Example usage:
     python qwenvl/train/train_qwen_trl.py \
         --model_name_or_path Qwen/Qwen2.5-VL-7B-Instruct \
-        --dataset_name demo_single_images \
+        --dataset_name trl-lib/llava-instruct-mix \
         --output_dir ./output/qwen-vl-7b-trl \
-        --per_device_train_batch_size 1 \
-        --gradient_accumulation_steps 4 \
+        --per_device_train_batch_size 2 \
+        --gradient_accumulation_steps 8 \
         --num_train_epochs 1 \
         --learning_rate 2e-5 \
         --bf16 True \
@@ -33,13 +33,11 @@ Example usage:
         --lora_target_modules all-linear
 """
 
-import json
-import os
 from dataclasses import dataclass, field
 from typing import Optional
 
 import torch
-from datasets import Dataset, load_dataset
+from datasets import load_dataset
 from transformers import AutoProcessor
 
 from trl import (
@@ -58,12 +56,6 @@ from trl import (
 class QwenScriptArguments(ScriptArguments):
     """Extended script arguments for Qwen-VL training."""
 
-    dataset_path: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "Path to local dataset JSON file (e.g., demo/single_images.json)"
-        },
-    )
     data_root: Optional[str] = field(
         default="", metadata={"help": "Root directory for image/video files"}
     )
@@ -78,85 +70,6 @@ class QwenScriptArguments(ScriptArguments):
     video_fps: float = field(
         default=2.0, metadata={"help": "FPS for video frame extraction"}
     )
-
-
-def load_qwen_dataset(dataset_path: str, data_root: str = "") -> Dataset:
-    """
-    Load Qwen-VL format dataset and convert to HF format.
-
-    Expected format:
-    [
-        {
-            "image": "path/to/image.jpg",
-            "conversations": [
-                {"from": "human", "value": "<image>\\nQuestion?"},
-                {"from": "gpt", "value": "Answer"}
-            ]
-        }
-    ]
-    """
-    with open(dataset_path, "r") as f:
-        data = json.load(f)
-
-    # Convert to TRL format
-    converted_data = []
-    for item in data:
-        # Handle images
-        if "image" in item:
-            image_path = (
-                os.path.join(data_root, item["image"]) if data_root else item["image"]
-            )
-            images = [image_path]
-        elif "images" in item:
-            images = [
-                os.path.join(data_root, img) if data_root else img
-                for img in item["images"]
-            ]
-        else:
-            images = []
-
-        # Handle videos
-        if "video" in item:
-            video_path = (
-                os.path.join(data_root, item["video"]) if data_root else item["video"]
-            )
-            videos = [video_path]
-        elif "videos" in item:
-            videos = [
-                os.path.join(data_root, vid) if data_root else vid
-                for vid in item["videos"]
-            ]
-        else:
-            videos = []
-
-        # Convert conversations to messages format
-        messages = []
-        for conv in item.get("conversations", []):
-            role = "user" if conv["from"] == "human" else "assistant"
-            messages.append({"role": role, "content": conv["value"]})
-
-        example = {"messages": messages}
-
-        # Add images/videos if present
-        if images:
-            example["images"] = images
-        if videos:
-            example["videos"] = videos
-
-        converted_data.append(example)
-
-    return Dataset.from_list(converted_data)
-
-
-def format_dataset_for_qwen(example, processor):
-    """Format dataset examples for Qwen-VL models."""
-    # Process messages and images together
-    text = processor.apply_chat_template(
-        example["messages"], tokenize=False, add_generation_prompt=False
-    )
-
-    return {"text": text, "images": example["images"]}
-
 
 if __name__ == "__main__":
     # Parse arguments
@@ -249,24 +162,16 @@ if __name__ == "__main__":
     ################
     # Dataset
     ################
-    if script_args.dataset_path:
-        # Load local dataset
-        print(f"Loading dataset from: {script_args.dataset_path}")
-        dataset = load_qwen_dataset(script_args.dataset_path, script_args.data_root)
-        train_dataset = dataset
-        eval_dataset = None
-    else:
-        # Load from HuggingFace Hub
-        print(f"Loading dataset: {script_args.dataset_name}")
-        dataset = load_dataset(
-            script_args.dataset_name, name=script_args.dataset_config
-        )
-        train_dataset = dataset[script_args.dataset_train_split]
-        eval_dataset = (
-            dataset[script_args.dataset_test_split]
-            if training_args.eval_strategy != "no"
-            else None
-        )
+    print(f"Loading dataset: {script_args.dataset_name}")
+    dataset = load_dataset(
+        script_args.dataset_name, name=script_args.dataset_config
+    )
+    train_dataset = dataset[script_args.dataset_train_split]
+    eval_dataset = (
+        dataset[script_args.dataset_test_split]
+        if training_args.eval_strategy != "no"
+        else None
+    )
 
     print(f"Train dataset size: {len(train_dataset)}")
     if eval_dataset:
