@@ -1,8 +1,8 @@
 # QwenVL Training Framework
 
-This repository provides a training framework for Qwen VL models. The are two steps to use our repo:
+This repository provides a training framework for Qwen VL models. There are two steps to use our repo:
 
-1. Customize your dataset: downloading data, implement the config
+1. Customize your dataset: downloading data, implementing the config
 2. Modify training scripts: 
 
 ## Repository Structure
@@ -12,7 +12,7 @@ The `qwenvl` directory contains the following components:
 ### `train/`
 - `trainer.py`: Main trainer updated from Huggingface Trainer
 - `train_qwen.py`: Main file for training
-- `argument.py`: Dataclasses for model, data and training arguments
+- `argument.py`: Dataclasses for model, data, and training arguments
 
 ### `data/`
 - `__init__.py`: Contains datasets configs
@@ -20,12 +20,12 @@ The `qwenvl` directory contains the following components:
 - `rope2d.py`: Provide RoPE implementation
 
 ### `tools`
-- `process_bbox.ipynb`: Convert bbox into QwenVL format. If you have grounding data, please refer this file to tranform your data.
-- `pack_data.py`: Pack data into even length buckets.
+- `process_bbox.ipynb`: Convert bbox into QwenVL format. If you have grounding data, please take a look at this file to transform your data.
+- `pack_data.py`: Pack data into even-length buckets.
 
 ## Requirements
 
-You could use follow version of packages:
+You could use the following version of packages:
 
 - `torch==2.6.0`
 - `torchvision==0.21.0`
@@ -151,7 +151,7 @@ The customized data should have the format like:
 ]
 ```
 
-Some examples are shown in `demo/single_images.json` and `demo/video.json` and these json files could be used for training.
+Some examples are shown in `demo/single_images.json` and `demo/video.json`, and these JSON files could be used for training.
 
 ### Dataset config for training
 
@@ -301,13 +301,13 @@ torchrun --nproc_per_node=$NPROC_PER_NODE \
 The script accepts arguments in three categories:
 
    - Flags to control which components to tune (`tune_mm_vision`, `tune_mm_mlp`, `tune_mm_llm`). If trained with both image and video data, tune_mm_vision should be False: `tune_mm_vision=False`
-   - `data_flatten` flag means data in a batch are concat into one sequence
-   - `data_packing` requires preprocess with `tools/pack_data.py`
+   - `data_flatten` flag means data in a batch is concatenated into one sequence
+   - `data_packing` requires pre-processing with `tools/pack_data.py`
    - Training hyperparameters, the suggested learning rate is from 1e-6 to 2e-7
-   - Training resolution is critical for the model performances, hence `--max_pixels` and `--min_pixels` should be properly set
-   - Training with Qwen2.5-VL-32B model, you should have 8 80G GPU refering to `scripts/sft_32b.sh`
-   - `"_attn_implementation": "flash_attention_2",` could be add in the config.json of the model to use flash attention.
-   - The Qwen3VL MoE model does not support DeepSpeed with ZeRO-3. Additionally, Hugging Face's official implementation does not include support for load balancing loss currently.
+   - Training resolution is critical for the model performance, hence `--max_pixels` and `--min_pixels` should be properly set
+   - Training with Qwen2.5-VL-32B model, you should have 8 80G GPU referring to `scripts/sft_32b.sh`
+   - `"_attn_implementation": "flash_attention_2",` could be added in the config.json of the model to use flash attention.
+   - The Qwen3VL MoE model does not support DeepSpeed with ZeRO-3. Additionally, Hugging Face's official implementation does not include support for load-balancing loss currently.
 
 ### TRL-Based Training (Single GPU)
 
