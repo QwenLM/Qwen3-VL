@@ -254,7 +254,7 @@ if __name__ == "__main__":
     # Dataset
     ################
     print(f"Loading dataset: {script_args.dataset_name}")
-    dataset = load_dataset("lmms-lab/multimodal-open-r1-8k-verified", split="train")
+    dataset = load_dataset("lmms-lab/multimodal-open-r1-8k-verified")
 
     SYSTEM_PROMPT = (
         "You are a helpful AI Assistant that provides well-reasoned and detailed responses. "
