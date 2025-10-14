@@ -407,8 +407,8 @@ class LazySupervisedDataset(Dataset):
             if not isinstance(video_grid_thw, Sequence):
                 video_grid_thw = [video_grid_thw]
             second_per_grid_ts = [
-                self.data_args.processor.video_processor.temporal_patch_size
-                / self.data_args.processor.video_processor.fps
+                self.processor.video_processor.temporal_patch_size
+                / self.processor.video_processor.fps
             ] * len(video_grid_thw)
         else:
             video_grid_thw = None

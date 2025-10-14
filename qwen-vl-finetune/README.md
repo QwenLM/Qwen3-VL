@@ -71,7 +71,7 @@ The customized data should have the format like:
 2. **Multi-Image Example**:
 ```json
 {
-    "images": ["cats/001.jpg", "cats/002.jpg"],
+    "image": ["cats/001.jpg", "cats/002.jpg"],
     "conversations": [
         {
             "from": "human",
