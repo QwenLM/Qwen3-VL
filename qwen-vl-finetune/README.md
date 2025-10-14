@@ -316,8 +316,8 @@ For single GPU training with LoRA/QLoRA using [TRL](hf.co/docs/trl)'s SFTTrainer
 **Basic Image Training:**
 ```bash
 python qwenvl/train/train_qwen_trl.py \
-    --model_name_or_path Qwen/Qwen3-VL-4B-Instruct \
-    --dataset_path demo/single_images.json \
+    --model_name_or_path Qwen/Qwen2.5-VL-7B-Instruct \
+    --dataset_name trl-lib/llava-instruct-mix \
     --output_dir ./output/qwen-vl-4b-lora \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 4 \
@@ -335,35 +335,11 @@ python qwenvl/train/train_qwen_trl.py \
     --report_to none
 ```
 
-**Video Training:**
-```bash
-# Note: Videos require larger max_length to avoid truncation
-python qwenvl/train/train_qwen_trl.py \
-    --model_name_or_path Qwen/Qwen3-VL-4B-Instruct \
-    --dataset_path demo/video.json \
-    --data_root demo/videos \
-    --output_dir ./output/qwen-vl-4b-video \
-    --per_device_train_batch_size 1 \
-    --gradient_accumulation_steps 4 \
-    --num_train_epochs 1 \
-    --learning_rate 2e-5 \
-    --bf16 \
-    --gradient_checkpointing \
-    --use_peft \
-    --lora_r 64 \
-    --lora_alpha 16 \
-    --lora_target_modules all-linear \
-    --max_length 20000 \
-    --video_fps 2.0 \
-    --logging_steps 10 \
-    --report_to none
-```
-
 **QLoRA Training (4-bit quantization):**
 ```bash
 python qwenvl/train/train_qwen_trl.py \
-    --model_name_or_path Qwen/Qwen3-VL-4B-Instruct \
-    --dataset_path demo/single_images.json \
+    --model_name_or_path Qwen/Qwen2.5-VL-7B-Instruct \
+    --dataset_name trl-lib/llava-instruct-mix \
     --output_dir ./output/qwen-vl-4b-qlora \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 4 \
@@ -385,8 +361,8 @@ python qwenvl/train/train_qwen_trl.py \
 **With [Liger Kernel](https://github.com/linkedin/Liger-Kernel) (optimized training):**
 ```bash
 python qwenvl/train/train_qwen_trl.py \
-    --model_name_or_path Qwen/Qwen3-VL-4B-Instruct \
-    --dataset_path demo/single_images.json \
+    --model_name_or_path Qwen/Qwen2.5-VL-7B-Instruct \
+    --dataset_name trl-lib/llava-instruct-mix \
     --output_dir ./output/qwen-vl-4b-liger \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 4 \
@@ -404,11 +380,9 @@ python qwenvl/train/train_qwen_trl.py \
 ```
 
 **Key TRL Arguments:**
-- `--dataset_path`: Path to local JSON dataset file
 - `--data_root`: Root directory for image/video files (optional if paths in JSON are absolute)
 - `--max_length`: Maximum sequence length (default: 1024). Use 20000+ for videos
 - `--max_pixels` / `--min_pixels`: Image resolution control (default: 50176/784)
-- `--video_fps`: Video frame sampling rate (default: 2.0)
 - `--use_peft`: Enable LoRA training
 - `--lora_r`: LoRA rank (higher = more parameters)
 - `--lora_alpha`: LoRA scaling factor
@@ -419,7 +393,6 @@ python qwenvl/train/train_qwen_trl.py \
 - `--use_liger`: Enable Liger kernel optimizations
 
 **Notes:**
-- The default `max_length=1024` works for images but videos need `max_length=20000` or higher to avoid truncation.
 - QLoRA (`--load_in_4bit`) significantly reduces memory usage, enabling training on GPUs with less VRAM.
 - Liger kernel (`--use_liger`) provides optimized kernels for faster training.
 - MoE models (Qwen3-VL-30B-A3B) automatically enable auxiliary/load balancing loss when detected.
