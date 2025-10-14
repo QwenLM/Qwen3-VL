@@ -17,7 +17,7 @@
 Training script for Qwen-VL models using TRL's SFTTrainer.
 
 Example usage:
-    python qwenvl/train/train_qwen_trl.py \
+    python qwenvl/train/train_qwen_trl_sft.py \
         --model_name_or_path Qwen/Qwen3-VL-8B-Instruct \
         --dataset_name trl-lib/llava-instruct-mix \
         --output_dir ./output/qwen-vl-8b-trl \
