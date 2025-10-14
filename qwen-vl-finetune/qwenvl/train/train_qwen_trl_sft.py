@@ -20,7 +20,7 @@ Example usage:
     python qwenvl/train/train_qwen_trl.py \
         --model_name_or_path Qwen/Qwen3-VL-8B-Instruct \
         --dataset_name trl-lib/llava-instruct-mix \
-        --output_dir ./output/qwen-vl-7b-trl \
+        --output_dir ./output/qwen-vl-8b-trl \
         --per_device_train_batch_size 2 \
         --gradient_accumulation_steps 8 \
         --num_train_epochs 1 \
