@@ -6,8 +6,10 @@ model_path = "./model/Qwen/Qwen3-VL-30B-A3B-Instruct-FP8"
 model = AutoModelForImageTextToText.from_pretrained(
     model_path,
     dtype="auto",
-    device_map="auto",
+    # device_map="cuda:0",
 )
+model = model.to("cuda")
+
 # We recommend enabling flash_attention_2 for better acceleration and memory saving, especially in multi-image and video scenarios.
 # import torch
 # model = AutoModelForImageTextToText.from_pretrained(
