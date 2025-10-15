@@ -207,7 +207,7 @@ if __name__ == "__main__":
     model_kwargs = dict(
         revision=model_args.model_revision,
         attn_implementation=model_args.attn_implementation or "flash_attention_2",
-        torch_dtype=dtype,
+        dtype=dtype,
     )
 
     # Add quantization config if specified
