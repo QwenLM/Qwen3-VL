@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # ==============================================
-# Qwen-VL 7B Training with TRL SFTTrainer
+# Qwen-VL Training with TRL SFTTrainer
 # Optimized for 1 GPU training
 # ==============================================
 
 # Model configuration
-MODEL_PATH="Qwen/Qwen2.5-VL-7B-Instruct"
+MODEL_PATH="Qwen/Qwen3-VL-8B-Instruct"
 
 # Dataset configuration
 # Option 1: Use local demo dataset
@@ -18,8 +18,8 @@ DATA_ROOT=""  # Leave empty if paths in JSON are absolute, or set to project roo
 # DATASET_CONFIG=""
 
 # Output configuration
-OUTPUT_DIR="./output/qwen-vl-7b-trl-lora"
-RUN_NAME="qwen-vl-7b-trl-sft"
+OUTPUT_DIR="./output/qwen-vl-8b-trl-lora"
+RUN_NAME="qwen-vl-8b-trl-sft"
 
 # Training hyperparameters (optimized for 1 GPU)
 BATCH_SIZE=1
@@ -37,7 +37,7 @@ LORA_DROPOUT=0.05
 LORA_TARGET_MODULES="all-linear"
 
 # Image processing
-MAX_PIXELS=50176   # ~224x224 for 7B model on single GPU
+MAX_PIXELS=50176   # ~224x224 for 8B model on single GPU
 MIN_PIXELS=784     # ~28x28
 
 # Advanced options
@@ -52,7 +52,7 @@ SAVE_TOTAL_LIMIT=2
 # ==============================================
 
 echo "========================================"
-echo "Starting Qwen-VL 7B Training with TRL"
+echo "Starting Qwen-VL 8B Training with TRL"
 echo "========================================"
 echo "Model: $MODEL_PATH"
 echo "Output: $OUTPUT_DIR"
