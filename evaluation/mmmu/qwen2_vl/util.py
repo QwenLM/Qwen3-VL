@@ -92,7 +92,13 @@ def download_file(url, filename=None):
 
     try:
         with DownloadProgressBar(unit='B', unit_scale=True, miniters=1, desc=url.split('/')[-1]) as t:
-            urllib.request.urlretrieve(url, filename=filename, reporthook=t.update_to)
+import requests
+if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+    raise ValueError("Invalid URL")
+try:
+    response = requests.get(url)
+except requests.RequestException as e:
+    raise
     except Exception as e:
         import logging
         logging.warning(f'{type(e)}: {e}')
