@@ -90,7 +90,7 @@ def to_rgb(pil_image: Image.Image) -> Image.Image:
           return pil_image.convert("RGB")
 
 
-def fetch_image(ele: Dict[str, Union[str, Image.Image]], image_patch_size: int = 14) -> Image.Image:
+def fetch_image(ele: Dict[str, Union[str, Image.Image]], image_patch_size: int = 16) -> Image.Image:
     if "image" in ele:
         image = ele["image"]
     else:
@@ -400,7 +400,7 @@ def get_video_reader_backend() -> str:
     return video_reader_backend
 
 
-def fetch_video(ele: Dict[str, Any], image_patch_size: int = 14, return_video_sample_fps: bool = False,
+def fetch_video(ele: Dict[str, Any], image_patch_size: int = 16, return_video_sample_fps: bool = False,
                 return_video_metadata: bool = False) -> Union[torch.Tensor, List[Image.Image]]:
     image_factor = image_patch_size * SPATIAL_MERGE_SIZE
     VIDEO_FRAME_MIN_PIXELS = VIDEO_MIN_TOKEN_NUM * image_factor * image_factor
@@ -502,7 +502,7 @@ def process_vision_info(
     conversations: Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]],
     return_video_kwargs: bool = False,
     return_video_metadata: bool = False,
-    image_patch_size: int = 14,
+    image_patch_size: int = 16,
 ) -> Tuple[Optional[List[Image.Image]], Optional[List[Union[torch.Tensor, List[Image.Image]]]], Optional[Dict[str, Any]]]:
 
     vision_infos = extract_vision_info(conversations)
