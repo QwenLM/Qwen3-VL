@@ -45,6 +45,8 @@ def parse_sampling_rate(dataset_name):
 def data_list(dataset_names):
     config_list = []
     for dataset_name in dataset_names:
+        if not dataset_name:
+            continue
         sampling_rate = parse_sampling_rate(dataset_name)
         dataset_name = re.sub(r"%(\d+)$", "", dataset_name)
         if dataset_name in data_dict.keys():
