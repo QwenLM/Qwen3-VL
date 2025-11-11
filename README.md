@@ -1158,7 +1158,7 @@ export top_p=0.95
 export top_k=20
 export repetition_penalty=1.0
 export presence_penalty=0.0
-export temperature=0.6
+export temperature=0.8
 export out_seq_length=40960
 ```
 
