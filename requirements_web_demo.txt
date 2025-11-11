@@ -1,14 +1,12 @@
 # Core dependencies
-gradio==5.4.0
-gradio_client==1.4.2
-qwen-vl-utils==0.0.10
-transformers-stream-generator==0.0.4
-torch==2.4.0
-torchvision==0.19.0
-git+https://github.com/huggingface/transformers.git
+gradio==5.49.1
+gradio_client==1.13.3
+transformers-stream-generator==0.0.5
+git+https://github.com/huggingface/transformers.git@7aa888b7fa477d13153ffbfe107dfbd6c696014a
+torch
+torchvision
 accelerate
-av
 
 # Optional dependency
 # Uncomment the following line if you need flash-attn
-# flash-attn==2.6.1
+# flash-attn

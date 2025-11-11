@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
-
+import os
 import copy
 import re
 from argparse import ArgumentParser
@@ -10,10 +10,15 @@ from threading import Thread
 
 import gradio as gr
 import torch
-from qwen_vl_utils import process_vision_info
-from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration, TextIteratorStreamer
+from transformers import AutoProcessor, AutoModelForImageTextToText, TextIteratorStreamer
 
-DEFAULT_CKPT_PATH = 'Qwen/Qwen2.5-VL-7B-Instruct'
+try:
+    from vllm import SamplingParams, LLM
+    from qwen_vl_utils import process_vision_info
+    VLLM_AVAILABLE = True
+except ImportError:
+    VLLM_AVAILABLE = False
+    print("Warning: vLLM not available. Install vllm and qwen-vl-utils to use vLLM backend.")
 
 
 def _get_args():
@@ -22,7 +27,7 @@ def _get_args():
     parser.add_argument('-c',
                         '--checkpoint-path',
                         type=str,
-                        default=DEFAULT_CKPT_PATH,
+                        default='Qwen/Qwen3-VL-235B-A22B-Instruct',
                         help='Checkpoint name or path, default to %(default)r')
     parser.add_argument('--cpu-only', action='store_true', help='Run demo with CPU only')
 
@@ -40,28 +45,64 @@ def _get_args():
                         help='Automatically launch the interface in a new tab on the default browser.')
     parser.add_argument('--server-port', type=int, default=7860, help='Demo server port.')
     parser.add_argument('--server-name', type=str, default='127.0.0.1', help='Demo server name.')
+    parser.add_argument('--backend',
+                        type=str,
+                        choices=['hf', 'vllm'],
+                        default='vllm',
+                        help='Backend to use: hf (HuggingFace) or vllm (vLLM)')
+    parser.add_argument('--gpu-memory-utilization',
+                        type=float,
+                        default=0.70,
+                        help='GPU memory utilization for vLLM (default: 0.70)')
+    parser.add_argument('--tensor-parallel-size',
+                        type=int,
+                        default=None,
+                        help='Tensor parallel size for vLLM (default: auto)')
 
     args = parser.parse_args()
     return args
 
 
 def _load_model_processor(args):
-    if args.cpu_only:
-        device_map = 'cpu'
-    else:
-        device_map = 'auto'
+    if args.backend == 'vllm':
+        if not VLLM_AVAILABLE:
+            raise ImportError("vLLM is not available. Please install vllm and qwen-vl-utils.")
 
-    # Check if flash-attn2 flag is enabled and load model accordingly
-    if args.flash_attn2:
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(args.checkpoint_path,
-                                                                torch_dtype='auto',
-                                                                attn_implementation='flash_attention_2',
-                                                                device_map=device_map)
-    else:
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(args.checkpoint_path, device_map=device_map)
+        os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
+        tensor_parallel_size = args.tensor_parallel_size
+        if tensor_parallel_size is None:
+            tensor_parallel_size = torch.cuda.device_count()
 
-    processor = AutoProcessor.from_pretrained(args.checkpoint_path)
-    return model, processor
+        # Initialize vLLM sync engine
+        model = LLM(
+            model=args.checkpoint_path,
+            trust_remote_code=True,
+            gpu_memory_utilization=args.gpu_memory_utilization,
+            enforce_eager=False,
+            tensor_parallel_size=tensor_parallel_size,
+            seed=0
+        )
+
+        # Load processor for vLLM
+        processor = AutoProcessor.from_pretrained(args.checkpoint_path)
+        return model, processor, 'vllm'
+    else:
+        if args.cpu_only:
+            device_map = 'cpu'
+        else:
+            device_map = 'auto'
+
+        # Check if flash-attn2 flag is enabled and load model accordingly
+        if args.flash_attn2:
+            model = AutoModelForImageTextToText.from_pretrained(args.checkpoint_path,
+                                                                    torch_dtype='auto',
+                                                                    attn_implementation='flash_attention_2',
+                                                                    device_map=device_map)
+        else:
+            model = AutoModelForImageTextToText.from_pretrained(args.checkpoint_path, device_map=device_map)
+
+        processor = AutoProcessor.from_pretrained(args.checkpoint_path)
+        return model, processor, 'hf'
 
 
 def _parse_text(text):
@@ -134,34 +175,73 @@ def _transform_messages(original_messages):
     return transformed_messages
 
 
-def _launch_demo(args, model, processor):
+def _prepare_inputs_for_vllm(messages, processor):
+    """Prepare inputs for vLLM inference"""
+    text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    image_inputs, video_inputs, video_kwargs = process_vision_info(
+        messages,
+        image_patch_size=processor.image_processor.patch_size,
+        return_video_kwargs=True,
+        return_video_metadata=True
+    )
 
-    def call_local_model(model, processor, messages):
+    mm_data = {}
+    if image_inputs is not None:
+        mm_data['image'] = image_inputs
+    if video_inputs is not None:
+        mm_data['video'] = video_inputs
 
+    return {
+        'prompt': text,
+        'multi_modal_data': mm_data,
+        'mm_processor_kwargs': video_kwargs
+    }
+
+
+def _launch_demo(args, model, processor, backend):
+
+    def call_local_model(model, processor, messages, backend):
         messages = _transform_messages(messages)
 
-        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        image_inputs, video_inputs = process_vision_info(messages)
-        inputs = processor(text=[text], images=image_inputs, videos=video_inputs, padding=True, return_tensors='pt')
-        inputs = inputs.to(model.device)
+        if backend == 'vllm':
+            # vLLM inference
+            inputs = _prepare_inputs_for_vllm(messages, processor)
+            sampling_params = SamplingParams(max_tokens=1024)
 
-        tokenizer = processor.tokenizer
-        streamer = TextIteratorStreamer(tokenizer, timeout=20.0, skip_prompt=True, skip_special_tokens=True)
+            accumulated_text = ''
+            for output in model.generate(inputs, sampling_params=sampling_params):
+                for completion in output.outputs:
+                    new_text = completion.text
+                    if new_text:
+                        accumulated_text += new_text
+                        yield accumulated_text
+        else:
+            # HuggingFace inference
+            inputs = processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt"
+            )
 
-        gen_kwargs = {'max_new_tokens': 512, 'streamer': streamer, **inputs}
+            tokenizer = processor.tokenizer
+            streamer = TextIteratorStreamer(tokenizer, timeout=20.0, skip_prompt=True, skip_special_tokens=True)
 
-        thread = Thread(target=model.generate, kwargs=gen_kwargs)
-        thread.start()
+            inputs = {k: v.to(model.device) for k, v in inputs.items()}
+            gen_kwargs = {'max_new_tokens': 1024, 'streamer': streamer, **inputs}
+            thread = Thread(target=model.generate, kwargs=gen_kwargs)
+            thread.start()
 
-        generated_text = ''
-        for new_text in streamer:
-            generated_text += new_text
-            yield generated_text
+            generated_text = ''
+            for new_text in streamer:
+                generated_text += new_text
+                yield generated_text
 
     def create_predict_fn():
 
         def predict(_chatbot, task_history):
-            nonlocal model, processor
+            nonlocal model, processor, backend
             chat_query = _chatbot[-1][0]
             query = task_history[-1][0]
             if len(chat_query) == 0:
@@ -176,9 +256,9 @@ def _launch_demo(args, model, processor):
             for q, a in history_cp:
                 if isinstance(q, (tuple, list)):
                     if _is_video_file(q[0]):
-                        content.append({'video': f'file://{q[0]}'})
+                        content.append({'video': f'{os.path.abspath(q[0])}'})
                     else:
-                        content.append({'image': f'file://{q[0]}'})
+                        content.append({'image': f'{os.path.abspath(q[0])}'})
                 else:
                     content.append({'text': q})
                     messages.append({'role': 'user', 'content': content})
@@ -186,7 +266,7 @@ def _launch_demo(args, model, processor):
                     content = []
             messages.pop()
 
-            for response in call_local_model(model, processor, messages):
+            for response in call_local_model(model, processor, messages, backend):
                 _chatbot[-1] = (_parse_text(chat_query), _remove_image_special(_parse_text(response)))
 
                 yield _chatbot
@@ -198,10 +278,11 @@ def _launch_demo(args, model, processor):
 
         return predict
 
+
     def create_regenerate_fn():
 
         def regenerate(_chatbot, task_history):
-            nonlocal model, processor
+            nonlocal model, processor, backend
             if not task_history:
                 return _chatbot
             item = task_history[-1]
@@ -248,14 +329,14 @@ def _launch_demo(args, model, processor):
 
     with gr.Blocks() as demo:
         gr.Markdown("""\
-<p align="center"><img src="https://modelscope.oss-cn-beijing.aliyuncs.com/resource/qwen.png" style="height: 80px"/><p>"""
+<p align="center"><img src="https://qianwen-res.oss-accelerate.aliyuncs.com/Qwen3-VL/qwen3vllogo.png" style="height: 80px"/><p>"""
                    )
-        gr.Markdown("""<center><font size=8>Qwen2.5-VL</center>""")
-        gr.Markdown("""\
-<center><font size=3>This WebUI is based on Qwen2.5-VL, developed by Alibaba Cloud.</center>""")
-        gr.Markdown("""<center><font size=3>本WebUI基于Qwen2.5-VL。</center>""")
+        gr.Markdown("""<center><font size=8>Qwen3-VL</center>""")
+        gr.Markdown(f"""\
+<center><font size=3>This WebUI is based on Qwen3-VL, developed by Alibaba Cloud. Backend: {backend.upper()}</center>""")
+        gr.Markdown(f"""<center><font size=3>本 WebUI 基于 Qwen3-VL。</center>""")
 
-        chatbot = gr.Chatbot(label='Qwen2.5-VL', elem_classes='control-height', height=500)
+        chatbot = gr.Chatbot(label='Qwen3-VL', elem_classes='control-height', height=500)
         query = gr.Textbox(lines=2, label='Input')
         task_history = gr.State([])
 
@@ -273,10 +354,10 @@ def _launch_demo(args, model, processor):
         addfile_btn.upload(add_file, [chatbot, task_history, addfile_btn], [chatbot, task_history], show_progress=True)
 
         gr.Markdown("""\
-<font size=2>Note: This demo is governed by the original license of Qwen2.5-VL. \
+<font size=2>Note: This demo is governed by the original license of Qwen3-VL. \
 We strongly advise users not to knowingly generate or allow others to knowingly generate harmful content, \
 including hate speech, violence, pornography, deception, etc. \
-(注：本演示受Qwen2.5-VL的许可协议限制。我们强烈建议，用户不应传播及不应允许他人传播以下内容，\
+(注：本演示受 Qwen3-VL 的许可协议限制。我们强烈建议，用户不应传播及不应允许他人传播以下内容，\
 包括但不限于仇恨言论、暴力、色情、欺诈相关的有害信息。)""")
 
     demo.queue().launch(
@@ -289,8 +370,8 @@ including hate speech, violence, pornography, deception, etc. \
 
 def main():
     args = _get_args()
-    model, processor = _load_model_processor(args)
-    _launch_demo(args, model, processor)
+    model, processor, backend = _load_model_processor(args)
+    _launch_demo(args, model, processor, backend)
 
 
 if __name__ == '__main__':
