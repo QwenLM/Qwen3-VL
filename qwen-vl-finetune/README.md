@@ -300,6 +300,7 @@ torchrun --nproc_per_node=$NPROC_PER_NODE \
          --lora_r 8 \                         # [TrainingArguments] LoRA r
          --lora_alpha 16 \                    # [TrainingArguments] LoRA alpha 
          --lora_dropout 0.0 \                # [TrainingArguments] LoRA dropout
+         # --lora_target_modules '["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]' \  # [TrainingArguments] LoRA target modules (optional, default: ["q_proj", "k_proj", "v_proj", "o_proj"]). Can also use space-separated format: "q_proj k_proj v_proj o_proj"
 
          # Advanced Options
          --deepspeed zero3.json \           # DeepSpeed configuration
@@ -308,6 +309,8 @@ torchrun --nproc_per_node=$NPROC_PER_NODE \
 The script accepts arguments in three categories:
 
    - Flags to control which components to tune (`tune_mm_vision`, `tune_mm_mlp`, `tune_mm_llm`). If trained with both image and video data, tune_mm_vision should be False: `tune_mm_vision=False`
+   - Training mode selection: If only `-tune_mm_vision True` or `-tune_mm_mlp True` or `-tune_mm_llm True` flags are set, full fine-tuning will be performed on the corresponding modules. If only LoRA is enabled (`-lora_enable True`), LoRA training will be applied to all trainable components. If both are set, LoRA training will only be applied to the modules specified by the (`tune_mm_vision`, `tune_mm_mlp`, `tune_mm_llm`) flags.
+   - LoRA configuration: `--lora_target_modules` can be used to specify which modules to apply LoRA. If not specified, defaults to `["q_proj", "k_proj", "v_proj", "o_proj"]`. Common options include: `q_proj`, `k_proj`, `v_proj`, `o_proj` (attention layers), `gate_proj`, `up_proj`, `down_proj` (MLP layers), `embed_tokens`, `lm_head`, etc. You can specify multiple modules in two ways: (1) JSON format: `--lora_target_modules '["q_proj", "k_proj", "v_proj", "o_proj"]'`, (2) Space-separated: `--lora_target_modules "q_proj k_proj v_proj o_proj"`.
    - `data_flatten` flag means data in a batch are concat into one sequence
    - `data_packing` requires preprocess with `tools/pack_data.py`
    - Training hyperparameters, the suggested learning rate is from 1e-6 to 2e-7

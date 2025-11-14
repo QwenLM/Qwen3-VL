@@ -43,3 +43,7 @@ class TrainingArguments(transformers.TrainingArguments):
     lora_r: int = field(default=64)
     lora_alpha: int = field(default=128)
     lora_dropout: float = field(default=0.0)
+    lora_target_modules: Optional[List[str]] = field(
+        default=None,
+        metadata={"help": "List of module names to apply LoRA. Default: ['q_proj', 'k_proj', 'v_proj', 'o_proj']"}
+    )

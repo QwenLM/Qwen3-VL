@@ -96,6 +96,16 @@ def train(attn_implementation="flash_attention_2"):
         (ModelArguments, DataArguments, TrainingArguments)
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    
+    # Handle lora_target_modules: if it's a string, try to parse it as JSON or split by space
+    if training_args.lora_target_modules is not None and isinstance(training_args.lora_target_modules, str):
+        import json
+        try:
+            # Try to parse as JSON
+            training_args.lora_target_modules = json.loads(training_args.lora_target_modules)
+        except (json.JSONDecodeError, ValueError):
+            # If not JSON, treat as space-separated string
+            training_args.lora_target_modules = training_args.lora_target_modules.split()
 
     local_rank = training_args.local_rank
     os.makedirs(training_args.output_dir, exist_ok=True)
@@ -160,23 +170,64 @@ def train(attn_implementation="flash_attention_2"):
         use_fast=False,
     )
 
+    # Check if any tune_mm_xx flags are set
+    has_tune_flags = model_args.tune_mm_vision or model_args.tune_mm_mlp or model_args.tune_mm_llm
+    
     if training_args.lora_enable:
         from peft import LoraConfig, get_peft_model, TaskType
         print("LoRA enabled")
 
+        # Freeze all parameters first
         for p in model.parameters():
             p.requires_grad = False
 
+        # Default target modules for Qwen models
+        target_modules = training_args.lora_target_modules or ["q_proj", "k_proj", "v_proj", "o_proj"]
+        
         lora_config = LoraConfig(
             r=training_args.lora_r or 64,
             lora_alpha=training_args.lora_alpha or 128,
             lora_dropout=training_args.lora_dropout or 0.05,
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # Qwen 的 attention 线性层
+            target_modules=target_modules,
             bias="none",
             task_type=TaskType.CAUSAL_LM,
         )
         model = get_peft_model(model, lora_config)
+        
+        # If both LoRA and tune_mm_xx flags are set, apply LoRA only to specified modules
+        if has_tune_flags:
+            print("LoRA will be applied only to modules specified by tune_mm_xx flags")
+            # After applying LoRA, freeze all LoRA parameters first
+            for name, param in model.named_parameters():
+                if "lora" in name.lower():
+                    param.requires_grad = False
+            
+            # Then re-enable LoRA parameters only for specified modules
+            # This ensures LoRA is only applied to modules specified by tune_mm_xx flags
+            if model_args.tune_mm_llm:
+                # Enable LoRA for LLM modules
+                for name, param in model.named_parameters():
+                    if "lora" in name.lower() and "language_model" in name:
+                        param.requires_grad = True
+                    # Also enable lm_head if it exists
+                    if "lm_head" in name:
+                        param.requires_grad = True
+            
+            # Note: Vision and MLP modules typically don't have q_proj/k_proj/v_proj/o_proj,
+            # so LoRA won't be applied to them via target_modules. But we still handle them:
+            if model_args.tune_mm_vision:
+                for name, param in model.visual.named_parameters():
+                    param.requires_grad = True
+            
+            if model_args.tune_mm_mlp:
+                for name, param in model.visual.merger.named_parameters():
+                    param.requires_grad = True
+        else:
+            # If only LoRA is enabled, LoRA will be applied to all matching modules
+            # LoRA parameters are already trainable by default after get_peft_model
+            print("LoRA will be applied to all trainable components")
     else:
+        # If only tune_mm_xx flags are set, perform full fine-tuning on specified modules
         set_model(model_args, model)
 
         if torch.distributed.get_rank() == 0:
