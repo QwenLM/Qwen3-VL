@@ -69,7 +69,7 @@ def inference(question: str, image: str):
     )
 
     print("Prediction: ", output_text)
-    return output_text
+    return output_text[0]
 
 
 @app.post("/understand_image_and_question")
