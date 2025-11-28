@@ -17,6 +17,9 @@ import traceback
 from dataset_utils import load_dataset, dump_image, MMMU_preproc
 from eval_utils import build_judge, eval_single_sample
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+sys.path.append(project_root)
 from qwen2_vl.model import Qwen2VLChat
 from qwen_vl_utils import process_vision_info
 
