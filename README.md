@@ -1,5 +1,6 @@
 # Qwen2.5-VL
 
+* Commit SHA: 29a9da773339adc8145302573f2f1571249aca47
 
 <p align="center">
     <img src="https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2.5-VL/qwen2.5vl_logo.png" width="400"/>
