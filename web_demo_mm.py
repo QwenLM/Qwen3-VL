@@ -106,6 +106,8 @@ def _load_model_processor(args):
 
 
 def _parse_text(text):
+    if not isinstance(text, str):
+        text = str(text)
     lines = text.split('\n')
     lines = [line for line in lines if line != '']
     count = 0
@@ -209,7 +211,7 @@ def _launch_demo(args, model, processor, backend):
             sampling_params = SamplingParams(max_tokens=1024)
 
             accumulated_text = ''
-            for output in model.generate(inputs, sampling_params=sampling_params):
+            for output in model.generate([inputs], sampling_params=sampling_params):
                 for completion in output.outputs:
                     new_text = completion.text
                     if new_text:
