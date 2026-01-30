@@ -1,8 +1,8 @@
 # QwenVL Training Framework
 
-This repository provides a training framework for Qwen VL models. The are two steps to use our repo:
+This repository provides a training framework for Qwen VL models. There are two steps to use our repo:
 
-1. Customize your dataset: downloading data, implement the config
+1. Customize your dataset: downloading data, implementing the config
 2. Modify training scripts: 
 
 ## Repository Structure
@@ -12,7 +12,7 @@ The `qwenvl` directory contains the following components:
 ### `train/`
 - `trainer.py`: Main trainer updated from Huggingface Trainer
 - `train_qwen.py`: Main file for training
-- `argument.py`: Dataclasses for model, data and training arguments
+- `argument.py`: Dataclasses for model, data, and training arguments
 
 ### `data/`
 - `__init__.py`: Contains datasets configs
@@ -20,12 +20,12 @@ The `qwenvl` directory contains the following components:
 - `rope2d.py`: Provide RoPE implementation
 
 ### `tools`
-- `process_bbox.ipynb`: Convert bbox into QwenVL format. If you have grounding data, please refer this file to tranform your data.
-- `pack_data.py`: Pack data into even length buckets.
+- `process_bbox.ipynb`: Convert bbox into QwenVL format. If you have grounding data, please take a look at this file to transform your data.
+- `pack_data.py`: Pack data into even-length buckets.
 
 ## Requirements
 
-You could use follow version of packages:
+You could use the following version of packages:
 
 - `torch==2.6.0`
 - `torchvision==0.21.0`
@@ -152,7 +152,7 @@ The customized data should have the format like:
 ]
 ```
 
-Some examples are shown in `demo/single_images.json` and `demo/video.json` and these json files could be used for training.
+Some examples are shown in `demo/single_images.json` and `demo/video.json`, and these JSON files could be used for training.
 
 ### Dataset config for training
 
@@ -308,11 +308,126 @@ torchrun --nproc_per_node=$NPROC_PER_NODE \
 The script accepts arguments in three categories:
 
    - Flags to control which components to tune (`tune_mm_vision`, `tune_mm_mlp`, `tune_mm_llm`). If trained with both image and video data, tune_mm_vision should be False: `tune_mm_vision=False`
-   - `data_flatten` flag means data in a batch are concat into one sequence
-   - `data_packing` requires preprocess with `tools/pack_data.py`
+   - `data_flatten` flag means data in a batch is concatenated into one sequence
+   - `data_packing` requires pre-processing with `tools/pack_data.py`
    - Training hyperparameters, the suggested learning rate is from 1e-6 to 2e-7
-   - Training resolution is critical for the model performances, hence `--max_pixels` and `--min_pixels` should be properly set
-   - Training with Qwen2.5-VL-32B model, you should have 8 80G GPU refering to `scripts/sft_32b.sh`
-   - `"_attn_implementation": "flash_attention_2",` could be add in the config.json of the model to use flash attention.
-   - The Qwen3VL MoE model does not support DeepSpeed with ZeRO-3. Additionally, Hugging Face’s official implementation does not include support for load balancing loss currently.
+   - Training resolution is critical for the model performance, hence `--max_pixels` and `--min_pixels` should be properly set
+   - Training with Qwen2.5-VL-32B model, you should have 8 80G GPU referring to `scripts/sft_32b.sh`
+   - `"_attn_implementation": "flash_attention_2",` could be added in the config.json of the model to use flash attention.
+   - The Qwen3VL MoE model does not support DeepSpeed with ZeRO-3. Additionally, Hugging Face's official implementation does not include support for load-balancing loss currently.
 
+### TRL-Based Training (Single GPU)
+
+You can fine-tune the models using the [Transformer Reinforcement Learning (TRL)](https://hf.co/docs/trl) library by Hugging Face with SFT or GRPO.
+
+#### Using SFT
+
+For single GPU training with LoRA/QLoRA using [SFTTrainer](https://huggingface.co/docs/trl/sft_trainer):
+
+**Basic Image Training: using [PEFT](https://huggingface.co/docs/peft/en/index)**
+```bash
+python qwenvl/train/train_qwen_trl_sft.py \
+    --model_name_or_path Qwen/Qwen3-VL-8B-Instruct \
+    --dataset_name trl-lib/llava-instruct-mix \
+    --output_dir ./output/qwen-vl-8b-lora \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 4 \
+    --num_train_epochs 1 \
+    --learning_rate 2e-5 \
+    --bf16 \
+    --gradient_checkpointing \
+    --use_peft \
+    --lora_r 64 \
+    --lora_alpha 16 \
+    --lora_target_modules all-linear \
+    --max_pixels 50176 \
+    --min_pixels 784 \
+    --logging_steps 10 \
+    --report_to none
+```
+
+**QLoRA Training (4-bit quantization): using [bitsandbytes](https://huggingface.co/docs/bitsandbytes/main/en/index)**
+```bash
+python qwenvl/train/train_qwen_trl_sft.py \
+    --model_name_or_path Qwen/Qwen3-VL-8B-Instruct \
+    --dataset_name trl-lib/llava-instruct-mix \
+    --output_dir ./output/qwen-vl-8b-qlora \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 4 \
+    --num_train_epochs 1 \
+    --learning_rate 2e-5 \
+    --fp16 \
+    --gradient_checkpointing \
+    --use_peft \
+    --lora_r 64 \
+    --lora_alpha 16 \
+    --lora_target_modules all-linear \
+    --load_in_4bit \
+    --bnb_4bit_quant_type nf4 \
+    --use_bnb_nested_quant \
+    --logging_steps 10 \
+    --report_to none
+```
+
+**With [Liger Kernel](https://github.com/linkedin/Liger-Kernel) (optimized training):**
+```bash
+python qwenvl/train/train_qwen_trl_sft.py \
+    --model_name_or_path Qwen/Qwen3-VL-8B-Instruct \
+    --dataset_name trl-lib/llava-instruct-mix \
+    --output_dir ./output/qwen-vl-8b-liger \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 4 \
+    --num_train_epochs 1 \
+    --learning_rate 2e-5 \
+    --bf16 \
+    --gradient_checkpointing \
+    --use_peft \
+    --lora_r 64 \
+    --lora_alpha 16 \
+    --lora_target_modules all-linear \
+    --use_liger \
+    --logging_steps 10 \
+    --report_to none
+```
+
+**Key TRL Arguments:**
+- `--max_length`: Maximum sequence length (default: 1024). Use 20000+ for videos
+- `--max_pixels` / `--min_pixels`: Image resolution control (default: 50176/784)
+- `--use_peft`: Enable LoRA training
+- `--lora_r`: LoRA rank (higher = more parameters)
+- `--lora_alpha`: LoRA scaling factor
+- `--lora_target_modules`: Which modules to apply LoRA to (`all-linear` recommended)
+- `--load_in_4bit`: Enable 4-bit quantization (QLoRA)
+- `--bnb_4bit_quant_type`: Quantization type (`nf4` or `fp4`)
+- `--use_bnb_nested_quant`: Enable nested quantization for better quality
+- `--use_liger`: Enable Liger kernel optimizations
+
+**Notes:**
+- QLoRA (`--load_in_4bit`) significantly reduces memory usage, enabling training on GPUs with less VRAM.
+- Liger kernel (`--use_liger`) provides optimized kernels for faster training.
+- MoE models (Qwen3-VL-30B-A3B) automatically enable auxiliary/load balancing loss when detected.
+
+#### Using GRPO
+
+For single GPU training with LoRA/QLoRA using [GRPOTrainer](https://huggingface.co/docs/trl/grpo_trainer):
+
+```bash
+python qwenvl/train/train_qwen_trl_grpo.py \
+    --model_name_or_path Qwen/Qwen3-VL-8B-Instruct \
+    --output_dir ./output/qwen-vl-8b-trl \
+    --per_device_train_batch_size 2 \
+    --per_device_train_batch_size 8 \
+    --max_completion_length 1024 \
+    --num_generations 8 \
+    --max_prompt_length 2048 \
+    --gradient_accumulation_steps 8 \
+    --num_train_epochs 1 \
+    --learning_rate 2e-5 \
+    --bf16 True \
+    --gradient_checkpointing True \
+    --use_peft True \
+    --lora_r 8 \
+    --lora_alpha 32 \
+    --lora_target_modules "q_proj", "v_proj" \
+    --log_completions
+```
