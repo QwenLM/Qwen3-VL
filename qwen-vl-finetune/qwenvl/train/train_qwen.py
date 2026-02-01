@@ -21,6 +21,7 @@ import torch
 import transformers
 import sys
 from pathlib import Path
+from types import MethodType
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
@@ -39,6 +40,7 @@ from qwenvl.train.argument import (
     DataArguments,
     TrainingArguments,
 )
+from qwenvl.model.qwen3vlmodel_forward import forward as new_forward
 from transformers import AutoProcessor, Trainer
 
 local_rank = None
@@ -116,6 +118,8 @@ def train(attn_implementation="flash_attention_2"):
             dtype=(torch.bfloat16 if training_args.bf16 else None),
         )
         data_args.model_type = "qwen3vl"
+        # use the patched forward method
+        model.model.forward = MethodType(new_forward, model.model)
     elif "qwen2.5" in model_args.model_name_or_path.lower():
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             model_args.model_name_or_path,
