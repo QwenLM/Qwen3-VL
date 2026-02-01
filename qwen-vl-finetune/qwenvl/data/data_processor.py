@@ -222,9 +222,11 @@ def preprocess_qwen_visual(
 
     input_ids_flat = input_ids[0].tolist()
     L = len(input_ids_flat)
-    pos = 0
+    # To check pos-1: pos 0 cannot be "assistant"
+    pos = 1
     while pos < L:
-        if input_ids_flat[pos] == 77091:
+        # Split by "<|im_start|>assistant": [151644, 77091]
+        if input_ids_flat[pos] == 77091 and input_ids_flat[pos - 1] == 151644:
             ans_start = pos + 2
             ans_end = ans_start
             while ans_end < L and input_ids_flat[ans_end] != 151645:
