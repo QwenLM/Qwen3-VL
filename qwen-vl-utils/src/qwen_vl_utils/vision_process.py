@@ -224,13 +224,6 @@ def _read_video_torchvision(
     )
     return video, video_metadata, sample_fps
 
-
-def is_decord_available() -> bool:
-    import importlib.util
-
-    return importlib.util.find_spec("decord") is not None
-
-
 def calculate_video_frame_range(
     ele: Dict[str, Any],
     total_frames: int,
@@ -288,47 +281,6 @@ def calculate_video_frame_range(
     logger.info(f"calculate video frame range: {start_frame=}, {end_frame=}, {total_frames=} from {video_start=}, {video_end=}, {video_fps=:.3f}")
     return start_frame, end_frame, end_frame - start_frame + 1
 
-
-def _read_video_decord(
-    ele: Dict[str, Any],
-) -> Tuple[torch.Tensor, float]:
-    """read video using decord.VideoReader
-
-    Args:
-        ele (dict): a dict contains the configuration of video.
-        support keys:
-            - video: the path of video. support "file://", "http://", "https://" and local path.
-            - video_start: the start time of video.
-            - video_end: the end time of video.
-    Returns:
-        torch.Tensor: the video tensor with shape (T, C, H, W).
-    """
-    import decord
-    video_path = ele["video"]
-    st = time.time()
-    vr = decord.VideoReader(video_path)
-    total_frames, video_fps = len(vr), vr.get_avg_fps()
-    start_frame, end_frame, total_frames = calculate_video_frame_range(
-        ele,
-        total_frames,
-        video_fps,
-    )
-    nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
-    idx = torch.linspace(start_frame, end_frame, nframes).round().long().tolist()
-    video = vr.get_batch(idx).asnumpy()
-    video = torch.tensor(video).permute(0, 3, 1, 2)  # Convert to TCHW format
-    logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    sample_fps = nframes / max(total_frames, 1e-6) * video_fps
-
-    video_metadata = dict(
-        fps=video_fps,
-        frames_indices=idx,
-        total_num_frames=total_frames,
-        video_backend="decord",
-    )
-    return video, video_metadata, sample_fps
-
-
 def is_torchcodec_available() -> bool:
     import importlib.util
 
@@ -378,7 +330,6 @@ def _read_video_torchcodec(
 
 
 VIDEO_READER_BACKENDS = {
-    "decord": _read_video_decord,
     "torchvision": _read_video_torchvision,
     "torchcodec": _read_video_torchcodec,
 }
@@ -392,8 +343,6 @@ def get_video_reader_backend() -> str:
         video_reader_backend = FORCE_QWENVL_VIDEO_READER
     elif is_torchcodec_available():
         video_reader_backend = "torchcodec"
-    elif is_decord_available():
-        video_reader_backend = "decord"
     else:
         video_reader_backend = "torchvision"
     print(f"qwen-vl-utils using {video_reader_backend} to read video.", file=sys.stderr)
