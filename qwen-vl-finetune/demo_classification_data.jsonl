@@ -1,0 +1,4 @@
+{"image": "path/to/image1.jpg", "instruction": "请识别这张图片的类别", "label": 0, "data_path": "data/images"}
+{"image": "path/to/image2.jpg", "instruction": "这张图片属于哪个类别？", "label": 1, "data_path": "data/images"}
+{"image": "path/to/image3.jpg", "instruction": "识别图片类别", "label": 5, "data_path": "data/images"}
+{"image": "path/to/image4.jpg", "instruction": "请分类这张图片", "label": 10, "data_path": "data/images"}
