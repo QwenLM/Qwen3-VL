@@ -24,6 +24,11 @@ VIDEO_TOKEN_INDEX = 151656
 DEFAULT_IMAGE_TOKEN = "<image>"
 DEFAULT_VIDEO_TOKEN = "<video>"
 
+# Special tokens for role identification in chat template
+IM_START_TOKEN = 151644  # <|im_start|>
+IM_END_TOKEN = 151645    # <|im_end|>
+ASSISTANT_TOKEN = 77091  # "assistant" (without leading space)
+
 local_rank = None
 
 
@@ -224,10 +229,16 @@ def preprocess_qwen_visual(
     L = len(input_ids_flat)
     pos = 0
     while pos < L:
-        if input_ids_flat[pos] == 77091:
+        # Look for the pattern: <|im_start|> assistant (token 151644 followed by 77091)
+        # This prevents false matches when "assistant" appears in user content
+        if (
+            input_ids_flat[pos] == ASSISTANT_TOKEN
+            and pos > 0
+            and input_ids_flat[pos - 1] == IM_START_TOKEN
+        ):
             ans_start = pos + 2
             ans_end = ans_start
-            while ans_end < L and input_ids_flat[ans_end] != 151645:
+            while ans_end < L and input_ids_flat[ans_end] != IM_END_TOKEN:
                 ans_end += 1
             if ans_end < L:
                 labels[0, ans_start : ans_end + 2] = input_ids[
