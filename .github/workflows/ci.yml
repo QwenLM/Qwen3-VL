@@ -2,98 +2,42 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main]
 
 jobs:
   lint:
-    name: Lint and Type Check
+    name: Lint
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-    
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-        cache: 'pip'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install ruff mypy pylint types-requests types-PyYAML
-        # Install project dependencies if requirements file exists
-        if [ -f "requirements.txt" ]; then
-          pip install -r requirements.txt
-        fi
-        if [ -f "evaluation/mmmu/requirements.txt" ]; then
-          pip install -r evaluation/mmmu/requirements.txt
-        fi
-    
-    - name: Run Ruff (linter)
-      run: |
-        ruff check src/ evaluation/ --output-format=github || true
-        ruff format --check src/ evaluation/ || true
-    
-    - name: Run Pylint
-      run: |
-        pylint src/ evaluation/ --disable=all --enable=E,F --output-format=text || true
-      continue-on-error: true
-    
-    - name: Run MyPy (type checker)
-      run: |
-        mypy src/ evaluation/ --ignore-missing-imports --no-strict-optional || true
-      continue-on-error: true
+      - uses: actions/checkout@v4
 
-  test:
-    name: Test Python Syntax
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-    
-    - name: Check Python syntax
-      run: |
-        python -m py_compile src/Qwen3VLTesting.py
-        find src/ evaluation/ -name "*.py" -exec python -m py_compile {} \;
-      continue-on-error: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-  code-quality:
-    name: Code Quality Checks
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Ruff lint
+        run: ruff check src/ evaluation/
+
+      - name: Ruff format
+        run: ruff format --check src/ evaluation/
+
+  type-check:
+    name: Type Check
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.12"
-    
-    - name: Check for large files
-      run: |
-        find . -type f -size +10M ! -path "./.git/*" ! -path "./local_transformers/__pycache__/*" -exec ls -lh {} \;
-      continue-on-error: true
-    
-    - name: Check for secrets
-      uses: trufflesecurity/trufflehog@main
-      with:
-        path: ./
-        base: ${{ github.event.repository.default_branch }}
-        head: HEAD
-      continue-on-error: true
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install mypy
+        run: pip install mypy types-requests types-PyYAML
+
+      - name: MyPy
+        run: mypy src/ evaluation/ --ignore-missing-imports

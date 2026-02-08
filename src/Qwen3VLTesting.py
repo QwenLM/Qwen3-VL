@@ -15,24 +15,26 @@ sys.path.insert(0, str(_project_root))
 
 # Import local_transformers as transformers
 import local_transformers as transformers
-sys.modules['transformers'] = transformers
 
-import json
-import time
+sys.modules["transformers"] = transformers
+
 import argparse
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, asdict
-from datetime import datetime
+import json
 import statistics
+import time
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import torch
-from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
 from tqdm import tqdm
+from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 
 
 @dataclass
 class InferenceMetrics:
     """Metrics for a single inference run."""
+
     sample_id: str
     preprocessing_time: float  # Time to process inputs
     generation_time: float  # Time for model generation
@@ -51,6 +53,7 @@ class InferenceMetrics:
 @dataclass
 class EvaluationSummary:
     """Summary statistics for evaluation run."""
+
     total_samples: int
     successful_samples: int
     failed_samples: int
@@ -68,7 +71,7 @@ class EvaluationSummary:
 
 class Qwen3VLEvaluator:
     """Evaluator class for Qwen3-VL models."""
-    
+
     def __init__(
         self,
         model_id: str,
@@ -78,7 +81,7 @@ class Qwen3VLEvaluator:
     ):
         """
         Initialize the evaluator.
-        
+
         Args:
             model_id: HuggingFace model identifier or local path
             device: Device to use ('cuda' or 'cpu'). Auto-detected if None.
@@ -89,43 +92,40 @@ class Qwen3VLEvaluator:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = dtype or ("float16" if self.device == "cuda" else "float32")
         self.device_map = device_map
-        
-        print(f"=== Initializing Qwen3-VL Evaluator ===")
+
+        print("=== Initializing Qwen3-VL Evaluator ===")
         print(f"Model ID: {model_id}")
         print(f"Device: {self.device}")
         print(f"Data Type: {self.dtype}")
-        
-        self.model = None
-        self.processor = None
+
+        self.model: Any = None
+        self.processor: Any = None
         self._load_model()
         self._load_processor()
-    
+
     def _load_model(self):
         """Load the model."""
         print("\n=== Loading Model ===")
         start_time = time.time()
-        
+
         model_kwargs = {
             "dtype": getattr(torch, self.dtype) if self.dtype != "auto" else "auto",
         }
-        
+
         if self.device_map:
             model_kwargs["device_map"] = self.device_map
         else:
             # Manual device placement
-            model = Qwen3VLForConditionalGeneration.from_pretrained(
-                self.model_id,
-                **model_kwargs
-            )
+            model = Qwen3VLForConditionalGeneration.from_pretrained(self.model_id, **model_kwargs)
             model.to(self.device)
             self.model = model
-        
+
         if not self.device_map:
             self.model.eval()
-        
+
         load_time = time.time() - start_time
         print(f"Model loaded in {load_time:.2f} seconds")
-    
+
     def _load_processor(self):
         """Load the processor."""
         print("\n=== Loading Processor ===")
@@ -133,7 +133,7 @@ class Qwen3VLEvaluator:
         self.processor = AutoProcessor.from_pretrained(self.model_id)
         load_time = time.time() - start_time
         print(f"Processor loaded in {load_time:.2f} seconds")
-    
+
     def run_inference(
         self,
         messages: List[Dict[str, Any]],
@@ -143,13 +143,13 @@ class Qwen3VLEvaluator:
     ) -> InferenceMetrics:
         """
         Run a single inference.
-        
+
         Args:
             messages: List of message dictionaries in the expected format
             max_new_tokens: Maximum number of tokens to generate
             temperature: Sampling temperature
             sample_id: Identifier for this sample
-            
+
         Returns:
             InferenceMetrics object with timing and performance data
         """
@@ -157,7 +157,7 @@ class Qwen3VLEvaluator:
         output_text = ""
         error_message = None
         success = True
-        
+
         try:
             # Preprocessing
             preprocess_start = time.time()
@@ -171,9 +171,9 @@ class Qwen3VLEvaluator:
             inputs.pop("token_type_ids", None)
             inputs = inputs.to(self.device)
             preprocessing_time = time.time() - preprocess_start
-            
+
             input_tokens = inputs["input_ids"].shape[1]
-            
+
             # Generation
             generation_start = time.time()
             with torch.no_grad():
@@ -183,12 +183,11 @@ class Qwen3VLEvaluator:
                     temperature=temperature,
                 )
             generation_time = time.time() - generation_start
-            
+
             # Trimming and decoding
             decode_start = time.time()
             generated_ids_trimmed = [
-                out_ids[len(in_ids):] 
-                for in_ids, out_ids in zip(inputs["input_ids"], generated_ids)
+                out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs["input_ids"], generated_ids)
             ]
             output_text = self.processor.batch_decode(
                 generated_ids_trimmed,
@@ -196,11 +195,11 @@ class Qwen3VLEvaluator:
                 clean_up_tokenization_spaces=False,
             )[0]
             decoding_time = time.time() - decode_start
-            
+
             output_tokens = len(generated_ids_trimmed[0])
             tokens_per_second = output_tokens / generation_time if generation_time > 0 else 0
             total_time = time.time() - total_start
-            
+
         except Exception as e:
             success = False
             error_message = str(e)
@@ -211,7 +210,7 @@ class Qwen3VLEvaluator:
             input_tokens = 0
             output_tokens = 0
             tokens_per_second = 0
-        
+
         return InferenceMetrics(
             sample_id=sample_id,
             preprocessing_time=preprocessing_time,
@@ -227,7 +226,7 @@ class Qwen3VLEvaluator:
             success=success,
             error_message=error_message,
         )
-    
+
     def evaluate_batch(
         self,
         test_cases: List[Dict[str, Any]],
@@ -237,23 +236,23 @@ class Qwen3VLEvaluator:
     ) -> List[InferenceMetrics]:
         """
         Run inference on a batch of test cases.
-        
+
         Args:
             test_cases: List of dicts with 'sample_id' and 'messages' keys
             max_new_tokens: Maximum number of tokens to generate
             temperature: Sampling temperature
             show_progress: Whether to show progress bar
-            
+
         Returns:
             List of InferenceMetrics objects
         """
-        results = []
+        results: List[InferenceMetrics] = []
         iterator = tqdm(test_cases, desc="Evaluating") if show_progress else test_cases
-        
+
         for test_case in iterator:
             sample_id = test_case.get("sample_id", f"sample_{len(results)}")
             messages = test_case["messages"]
-            
+
             metrics = self.run_inference(
                 messages=messages,
                 max_new_tokens=max_new_tokens,
@@ -261,14 +260,14 @@ class Qwen3VLEvaluator:
                 sample_id=sample_id,
             )
             results.append(metrics)
-        
+
         return results
-    
+
     def compute_summary(self, metrics_list: List[InferenceMetrics]) -> EvaluationSummary:
         """Compute summary statistics from a list of metrics."""
         successful_metrics = [m for m in metrics_list if m.success]
         failed_metrics = [m for m in metrics_list if not m.success]
-        
+
         if not successful_metrics:
             return EvaluationSummary(
                 total_samples=len(metrics_list),
@@ -285,10 +284,10 @@ class Qwen3VLEvaluator:
                 p95_generation_time=0,
                 p99_generation_time=0,
             )
-        
+
         generation_times = [m.generation_time for m in successful_metrics]
         generation_times_sorted = sorted(generation_times)
-        
+
         return EvaluationSummary(
             total_samples=len(metrics_list),
             successful_samples=len(successful_metrics),
@@ -301,8 +300,12 @@ class Qwen3VLEvaluator:
             total_tokens_generated=sum([m.output_tokens for m in successful_metrics]),
             total_time=sum([m.total_time for m in metrics_list]),
             median_generation_time=statistics.median(generation_times),
-            p95_generation_time=generation_times_sorted[int(len(generation_times_sorted) * 0.95)] if generation_times_sorted else 0,
-            p99_generation_time=generation_times_sorted[int(len(generation_times_sorted) * 0.99)] if generation_times_sorted else 0,
+            p95_generation_time=generation_times_sorted[int(len(generation_times_sorted) * 0.95)]
+            if generation_times_sorted
+            else 0,
+            p99_generation_time=generation_times_sorted[int(len(generation_times_sorted) * 0.99)]
+            if generation_times_sorted
+            else 0,
         )
 
 
@@ -333,19 +336,19 @@ def save_results(
 ):
     """Save evaluation results to files."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Save detailed metrics as JSON
     metrics_file = output_dir / f"{prefix}_metrics.json"
     with open(metrics_file, "w", encoding="utf-8") as f:
         json.dump([asdict(m) for m in metrics_list], f, indent=2, ensure_ascii=False)
     print(f"\nDetailed metrics saved to: {metrics_file}")
-    
+
     # Save summary as JSON
     summary_file = output_dir / f"{prefix}_summary.json"
     with open(summary_file, "w", encoding="utf-8") as f:
         json.dump(asdict(summary), f, indent=2)
     print(f"Summary saved to: {summary_file}")
-    
+
     # Print summary to console
     print("\n" + "=" * 60)
     print("EVALUATION SUMMARY")
@@ -353,25 +356,23 @@ def save_results(
     print(f"Total Samples: {summary.total_samples}")
     print(f"Successful: {summary.successful_samples}")
     print(f"Failed: {summary.failed_samples}")
-    print(f"\nTiming Metrics:")
-    print(f"  Average Preprocessing Time: {summary.avg_preprocessing_time*1000:.2f} ms")
-    print(f"  Average Generation Time: {summary.avg_generation_time*1000:.2f} ms")
-    print(f"  Average Decoding Time: {summary.avg_decoding_time*1000:.2f} ms")
-    print(f"  Average Total Time: {summary.avg_total_time*1000:.2f} ms")
-    print(f"\nPerformance Metrics:")
+    print("\nTiming Metrics:")
+    print(f"  Average Preprocessing Time: {summary.avg_preprocessing_time * 1000:.2f} ms")
+    print(f"  Average Generation Time: {summary.avg_generation_time * 1000:.2f} ms")
+    print(f"  Average Decoding Time: {summary.avg_decoding_time * 1000:.2f} ms")
+    print(f"  Average Total Time: {summary.avg_total_time * 1000:.2f} ms")
+    print("\nPerformance Metrics:")
     print(f"  Average Tokens/Second: {summary.avg_tokens_per_second:.2f}")
     print(f"  Total Tokens Generated: {summary.total_tokens_generated}")
-    print(f"  Median Generation Time: {summary.median_generation_time*1000:.2f} ms")
-    print(f"  P95 Generation Time: {summary.p95_generation_time*1000:.2f} ms")
-    print(f"  P99 Generation Time: {summary.p99_generation_time*1000:.2f} ms")
+    print(f"  Median Generation Time: {summary.median_generation_time * 1000:.2f} ms")
+    print(f"  P95 Generation Time: {summary.p95_generation_time * 1000:.2f} ms")
+    print(f"  P99 Generation Time: {summary.p99_generation_time * 1000:.2f} ms")
     print(f"  Total Evaluation Time: {summary.total_time:.2f} seconds")
     print("=" * 60)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Qwen3-VL Evaluation Script with Timing Metrics"
-    )
+    parser = argparse.ArgumentParser(description="Qwen3-VL Evaluation Script with Timing Metrics")
     parser.add_argument(
         "--model-id",
         type=str,
@@ -434,20 +435,20 @@ def main():
         default="evaluation",
         help="Prefix for output files",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Initialize evaluator
     device = None if args.device == "auto" else args.device
     dtype = None if args.dtype == "auto" else args.dtype
-    
+
     evaluator = Qwen3VLEvaluator(
         model_id=args.model_id,
         device=device,
         dtype=dtype,
         device_map=args.device_map,
     )
-    
+
     # Load test cases
     if args.test_cases_file:
         print(f"\n=== Loading Test Cases from {args.test_cases_file} ===")
@@ -457,24 +458,24 @@ def main():
     else:
         print(f"\n=== Using Default Test Case (running {args.num_samples} times) ===")
         test_cases = [create_default_test_case() for _ in range(args.num_samples)]
-    
+
     # Run evaluation
-    print(f"\n=== Running Evaluation ===")
+    print("\n=== Running Evaluation ===")
     metrics_list = evaluator.evaluate_batch(
         test_cases=test_cases,
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
         show_progress=True,
     )
-    
+
     # Compute summary
     summary = evaluator.compute_summary(metrics_list)
-    
+
     # Create timestamped subdirectory for this run
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_output_dir = Path(args.output_dir)
     output_dir = base_output_dir / timestamp
-    
+
     # Save results
     save_results(metrics_list, summary, output_dir, args.output_prefix)
 
