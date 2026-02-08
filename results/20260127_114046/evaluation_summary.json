@@ -1,0 +1,15 @@
+{
+  "total_samples": 1,
+  "successful_samples": 1,
+  "failed_samples": 0,
+  "avg_preprocessing_time": 2.4403460025787354,
+  "avg_generation_time": 13.336276292800903,
+  "avg_decoding_time": 0.0009996891021728516,
+  "avg_total_time": 15.777621984481812,
+  "avg_tokens_per_second": 9.597881536774706,
+  "total_tokens_generated": 128,
+  "total_time": 15.777621984481812,
+  "median_generation_time": 13.336276292800903,
+  "p95_generation_time": 13.336276292800903,
+  "p99_generation_time": 13.336276292800903
+}

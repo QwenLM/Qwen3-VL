@@ -1,0 +1,17 @@
+[
+  {
+    "sample_id": "demo_sample",
+    "preprocessing_time": 2.260167360305786,
+    "generation_time": 9.655761957168579,
+    "decoding_time": 0.0,
+    "total_time": 11.915929317474365,
+    "input_tokens": 2766,
+    "output_tokens": 128,
+    "tokens_per_second": 13.256333427417495,
+    "max_new_tokens": 128,
+    "temperature": 0.1,
+    "output_text": "This is a heartwarming photograph capturing a tender moment between a woman and her dog on a sandy beach at sunset.\n\nThe scene is set on a wide, sandy beach with the ocean stretching out to the horizon. The sun is low, casting a warm, golden glow across the scene, which is characteristic of either sunrise or sunset. The sky is a soft, pale white, and the ocean waves are visible in the distance, with a gentle wave breaking near the shore.\n\nIn the foreground, a woman with long, dark hair is sitting on the sand. She is wearing a black and white plaid shirt and dark pants. She is",
+    "success": true,
+    "error_message": null
+  }
+]
