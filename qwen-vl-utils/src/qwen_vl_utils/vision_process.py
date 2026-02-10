@@ -95,6 +95,8 @@ def fetch_image(ele: Dict[str, Union[str, Image.Image]], image_patch_size: int =
         image = ele["image"]
     else:
         image = ele["image_url"]
+        if "url" in ele:
+            image = image["url"]
 
     image_obj = None
     patch_factor = int(image_patch_size * SPATIAL_MERGE_SIZE)
