@@ -503,7 +503,7 @@ def process_vision_info(
     return_video_kwargs: bool = False,
     return_video_metadata: bool = False,
     image_patch_size: int = 14,
-) -> Tuple[Optional[List[Image.Image]], Optional[List[Union[torch.Tensor, List[Image.Image]]]], Optional[Dict[str, Any]]]:
+) -> Union[Tuple[Optional[List[Image.Image]], Optional[List[Union[torch.Tensor, List[Image.Image]]]]], Tuple[Optional[List[Image.Image]], Optional[List[Union[torch.Tensor, List[Image.Image]]]], Optional[Dict[str, Any]]]]:
 
     vision_infos = extract_vision_info(conversations)
     ## Read images or videos
