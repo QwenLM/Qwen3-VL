@@ -520,7 +520,8 @@ def extract_vision_info(conversations: Union[List[Dict[str, Any]], List[List[Dic
                         "image" in ele
                         or "image_url" in ele
                         or "video" in ele
-                        or ele.get("type", "text") in ("image", "image_url", "video")
+                        or "audio" in ele
+                        or ele.get("type", "text") in ("image", "image_url", "video", "audio")
                     ):
                         vision_infos.append(ele)
     return vision_infos
