@@ -19,6 +19,7 @@ from PIL import Image
 import numpy as np
 from torchvision import io, transforms
 from torchvision.transforms import InterpolationMode
+import torchaudio
 
 
 MAX_RATIO = 200
@@ -479,7 +480,34 @@ def fetch_video(ele: Dict[str, Any], image_patch_size: int = 14, return_video_sa
         return final_video, sample_fps
     return final_video
 
+def fetch_audio(ele: Dict[str, Any], target_sr: int = 16000) -> Tuple[np.ndarray, int]:
+    
+    audio_data = ele.get("audio", ele)
+    
+    if isinstance(audio_data, dict) and "bytes" in audio_data:
+        waveform, sample_rate = torchaudio.load(BytesIO(audio_data["bytes"]))
+    elif isinstance(audio_data, bytes):
+        waveform, sample_rate = torchaudio.load(BytesIO(audio_data))
+    else:
+        raise ValueError(f"Unrecognized audio input, got {type(audio_data)}")
+    
+    # waveform: (channels, num_samples)
+    # convert waveform to float32 to ensure resampling operates in float32
+    waveform = waveform.to(dtype=torch.float32)
 
+    # Convert to mono (Whisper expects mono audio input)
+    if waveform.ndim == 2 and waveform.size(0) > 1:
+        waveform = waveform.mean(dim=0, keepdim=True)
+
+    # Resample if needed
+    if sample_rate != target_sr:
+        waveform = torchaudio.functional.resample(waveform, sample_rate, target_sr)
+        sample_rate = target_sr
+
+    # Return 1D float32 numpy array
+    waveform_1d = waveform.squeeze(0).contiguous().cpu().numpy().astype(np.float32)
+    return waveform_1d, sample_rate
+    
 def extract_vision_info(conversations: Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]) -> List[Dict[str, Any]]:
     vision_infos = []
     if isinstance(conversations[0], dict):
