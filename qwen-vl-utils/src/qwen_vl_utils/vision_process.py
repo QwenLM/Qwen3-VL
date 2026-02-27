@@ -90,14 +90,14 @@ def to_rgb(pil_image: Image.Image) -> Image.Image:
           return pil_image.convert("RGB")
 
 
-def fetch_image(ele: Dict[str, Union[str, Image.Image]], image_patch_size: int = 14) -> Image.Image:
+def load_image(ele: Dict[str, Union[str, Image.Image]]) -> Image.Image:
+    """Load an image from various sources and convert to RGB, without resizing."""
     if "image" in ele:
         image = ele["image"]
     else:
         image = ele["image_url"]
 
     image_obj = None
-    patch_factor = int(image_patch_size * SPATIAL_MERGE_SIZE)
     if isinstance(image, Image.Image):
         image_obj = image
     elif image.startswith("http://") or image.startswith("https://"):
@@ -117,7 +117,12 @@ def fetch_image(ele: Dict[str, Union[str, Image.Image]], image_patch_size: int =
         image_obj = Image.open(image)
     if image_obj is None:
         raise ValueError(f"Unrecognized image input, support local path, http url, base64 and PIL.Image, got {image}")
-    image = to_rgb(image_obj)
+    return to_rgb(image_obj)
+
+
+def fetch_image(ele: Dict[str, Union[str, Image.Image]], image_patch_size: int = 14) -> Image.Image:
+    image = load_image(ele)
+    patch_factor = int(image_patch_size * SPATIAL_MERGE_SIZE)
 
     ## resize
     if "resized_height" in ele and "resized_width" in ele:
@@ -418,11 +423,11 @@ def fetch_video(ele: Dict[str, Any], image_patch_size: int = 14, return_video_sa
         process_info = ele.copy()
         process_info.pop("type", None)
         process_info.pop("video", None)
-        # use ThreadPoolExecutor to parallel process frames
+        # use ThreadPoolExecutor to parallel load frames
         max_workers = min(MAX_NUM_WORKERS_FETCH_VIDEO, len(ele["video"]))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [
-                executor.submit(fetch_image, {"image": video_element, **process_info}, image_patch_size)
+                executor.submit(load_image, {"image": video_element, **process_info})
                 for video_element in ele["video"]
             ]
             image_list = [future.result() for future in futures]
