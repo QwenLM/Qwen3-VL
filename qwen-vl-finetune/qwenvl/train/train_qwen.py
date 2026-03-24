@@ -65,26 +65,28 @@ def safe_save_model_for_hf_trainer(trainer: transformers.Trainer, output_dir: st
 
 
 def set_model(model_args, model):
+    visual = getattr(model, "visual", None) or getattr(model.model, "visual", None)
+    language_model = getattr(model, "language_model", None) or getattr(model.model, "language_model", None)
     if model_args.tune_mm_vision:
-        for n, p in model.visual.named_parameters():
+        for n, p in visual.named_parameters():
             p.requires_grad = True
     else:
-        for n, p in model.visual.named_parameters():
+        for n, p in visual.named_parameters():
             p.requires_grad = False
 
     if model_args.tune_mm_mlp:
-        for n, p in model.visual.merger.named_parameters():
+        for n, p in visual.merger.named_parameters():
             p.requires_grad = True
     else:
-        for n, p in model.visual.merger.named_parameters():
+        for n, p in visual.merger.named_parameters():
             p.requires_grad = False
 
     if model_args.tune_mm_llm:
-        for n, p in model.language_model.named_parameters():
+        for n, p in language_model.named_parameters():
             p.requires_grad = True
         model.lm_head.requires_grad = True
     else:
-        for n, p in model.language_model.named_parameters():
+        for n, p in language_model.named_parameters():
             p.requires_grad = False
         model.lm_head.requires_grad = False
 
@@ -180,7 +182,8 @@ def train(attn_implementation="flash_attention_2"):
         set_model(model_args, model)
 
         if torch.distributed.get_rank() == 0:
-            model.visual.print_trainable_parameters()
+            visual = getattr(model, "visual", None) or getattr(model.model, "visual", None)
+            visual.print_trainable_parameters()
             model.model.print_trainable_parameters()
     
     data_module = make_supervised_data_module(processor, data_args=data_args)
