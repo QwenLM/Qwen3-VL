@@ -216,6 +216,16 @@ def _read_video_torchvision(
     sample_fps = nframes / max(total_frames, 1e-6) * video_fps
     video = video[idx]
 
+    # Make frame indices absolute to the original video, matching decord/torchcodec.
+    # torchvision.read_video returns a clipped segment, so sampled idx is relative
+    # to that clip. We add the start offset computed from video_start and video_fps.
+    video_start = ele.get("video_start", None)
+    if video_start is not None:
+        start_offset = math.ceil(max(video_start, 0.0) * video_fps)
+    else:
+        start_offset = 0
+    idx = (idx + start_offset).tolist()
+
     video_metadata = dict(
         fps=video_fps,
         frames_indices=idx,
