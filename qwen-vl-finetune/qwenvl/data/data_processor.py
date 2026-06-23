@@ -113,7 +113,7 @@ def update_processor_pixels(processor, data_args):
             vp.fps = data_args.video_fps
             rank0_print(f"✅ Updated video_processor fps to {data_args.video_fps}")
 
-        if hasattr(vp, "size") and isinstance(vp.size, dict):
+        if hasattr(vp, "size") and hasattr(vp.size, "__setitem__"):
             vp.size["shortest_edge"] = data_args.video_min_pixels
             vp.size["longest_edge"] = data_args.video_max_pixels
             rank0_print(
