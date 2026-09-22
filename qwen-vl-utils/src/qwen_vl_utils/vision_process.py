@@ -72,8 +72,8 @@ def smart_resize(height: int, width: int, factor: int, min_pixels: Optional[int]
     w_bar = max(factor, round_by_factor(width, factor))
     if h_bar * w_bar > max_pixels:
         beta = math.sqrt((height * width) / max_pixels)
-        h_bar = floor_by_factor(height / beta, factor)
-        w_bar = floor_by_factor(width / beta, factor)
+        h_bar = max(factor, floor_by_factor(height / beta, factor))
+        w_bar = max(factor, floor_by_factor(width / beta, factor))
     elif h_bar * w_bar < min_pixels:
         beta = math.sqrt(min_pixels / (height * width))
         h_bar = ceil_by_factor(height * beta, factor)
