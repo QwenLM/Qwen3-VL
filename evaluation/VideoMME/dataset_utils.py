@@ -78,7 +78,7 @@ def load_subtitles(subtitle_path, frame_timestamps):
     
     for sub in subs:
         for frame_timestamp in frame_timestamps:
-            if sub.start / 1000 < frame_timestamp and sub.end / 1000 > frame_timestamp:
+            if sub.start / 1000 <= frame_timestamp and sub.end / 1000 > frame_timestamp:
                 sub_text = sub.text.replace('\\N', ' ')
                 if sub_text.strip():
                     subtitles.append(sub_text)
