@@ -79,6 +79,11 @@ def flash_attention_forward(
         else:
             target_dtype = next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
 
+    if target_dtype is not None:
+        query = query.to(target_dtype)
+        key = key.to(target_dtype)
+        value = value.to(target_dtype)
+
     query = query.squeeze(0)
     key = key.squeeze(0)
     value = value.squeeze(0)
@@ -92,6 +97,12 @@ def flash_attention_forward(
             ]
         ).item()
 
+    kernel_kwargs = {}
+    if sliding_window is not None:
+        kernel_kwargs["window_size"] = (sliding_window - 1, 0)
+    if softcap is not None:
+        kernel_kwargs["softcap"] = softcap
+
     attn_output = flash_attn_varlen_func(
         query,
         key,
@@ -100,7 +111,10 @@ def flash_attention_forward(
         cu_seqlens_k=cu_seqlens,
         max_seqlen_q=max_seqlen,
         max_seqlen_k=max_seqlen,
+        dropout_p=dropout,
+        softmax_scale=scaling,
         causal=True,
+        **kernel_kwargs,
     )
 
     attn_output = attn_output.unsqueeze(0)
