@@ -463,6 +463,45 @@ def create_optimizer(self):
                         "lr": self.args.mm_projector_lr,
                     },
                 ]
+        elif self.args.vision_tower_lr is not None and self.args.vision_tower_lr != 0:
+            # A vision learning rate is independent of the projector override.
+            # Merger parameters retain the base rate when no projector rate is set.
+            vision_tower_parameters = [
+                name for name, _ in opt_model.named_parameters()
+                if "visual" in name and "merger" not in name
+            ]
+            optimizer_grouped_parameters = [
+                {
+                    "params": [
+                        p for n, p in opt_model.named_parameters()
+                        if n in decay_parameters and n not in vision_tower_parameters and p.requires_grad
+                    ],
+                    "weight_decay": self.args.weight_decay,
+                },
+                {
+                    "params": [
+                        p for n, p in opt_model.named_parameters()
+                        if n not in decay_parameters and n not in vision_tower_parameters and p.requires_grad
+                    ],
+                    "weight_decay": 0.0,
+                },
+                {
+                    "params": [
+                        p for n, p in opt_model.named_parameters()
+                        if n in decay_parameters and n in vision_tower_parameters and p.requires_grad
+                    ],
+                    "weight_decay": self.args.weight_decay,
+                    "lr": self.args.vision_tower_lr,
+                },
+                {
+                    "params": [
+                        p for n, p in opt_model.named_parameters()
+                        if n not in decay_parameters and n in vision_tower_parameters and p.requires_grad
+                    ],
+                    "weight_decay": 0.0,
+                    "lr": self.args.vision_tower_lr,
+                },
+            ]
         else:
             optimizer_grouped_parameters = [
                 {
