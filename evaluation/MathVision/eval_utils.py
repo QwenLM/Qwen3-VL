@@ -1,4 +1,6 @@
 import os
+import ast
+import operator
 import requests
 import time
 import random
@@ -19,6 +21,27 @@ except ImportError:
 FAIL_MSG = 'Failed to obtain answer via API.'
 
 
+def _numeric_expression(text):
+    """Evaluate only numeric constants and arithmetic, never Python code."""
+    binary_ops = {
+        ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+        ast.Div: operator.truediv, ast.Pow: operator.pow,
+        ast.Mod: operator.mod, ast.FloorDiv: operator.floordiv,
+    }
+    unary_ops = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+    def evaluate(node):
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in binary_ops:
+            return binary_ops[type(node.op)](evaluate(node.left), evaluate(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in unary_ops:
+            return unary_ops[type(node.op)](evaluate(node.operand))
+        raise ValueError("Answer is not a numeric expression")
+
+    return evaluate(ast.parse(text, mode="eval").body)
+
+
 def is_equal(asw: str, gt_asw: str) -> bool:
     """Check if two answers are equal."""
     if not isinstance(asw, str) or not isinstance(gt_asw, str):
@@ -29,8 +52,8 @@ def is_equal(asw: str, gt_asw: str) -> bool:
     if gt_asw == asw:
         return True
     try:
-        a = eval(gt_asw)
-        b = eval(asw)
+        a = _numeric_expression(gt_asw)
+        b = _numeric_expression(asw)
         if abs(a - b) < 1e-6:
             return True
     except:
@@ -39,8 +62,6 @@ def is_equal(asw: str, gt_asw: str) -> bool:
         try:
             a = latex2sympy(gt_asw)
             b = latex2sympy(asw)
-            if abs(eval(str(a)) - eval(str(b))) < 1e-6:
-                return True
             if abs(a - b) < 1e-6:
                 return True
         except:
@@ -182,16 +203,17 @@ def post_check(line, prefetch=False):
     ans = line['answer']
     response = line['prediction'] if prefetch else line['res']
     try:
-        if len(eval(line['choices'])) > 0:
+        parsed_choices = ast.literal_eval(line['choices'])
+        if len(parsed_choices) > 0:
             ans = line['answer']
-            choices = list_to_dict(eval(line['choices']))
+            choices = list_to_dict(parsed_choices)
             res = can_infer(response, choices)
             if prefetch:
                 return res
         else:
             res = str(response)
             ans = str(ans)
-    except ValueError:
+    except (ValueError, SyntaxError, TypeError):
         pass
 
     if is_equal(res, ans):

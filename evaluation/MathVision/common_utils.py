@@ -1,4 +1,5 @@
 import os
+import ast
 import requests
 import base64
 import hashlib
@@ -51,10 +52,11 @@ def md5(file_path):
     return hash_md5.hexdigest()
 
 def toliststr(s):
-    if isinstance(s, str) and (s[0] == '[') and (s[-1] == ']'):
-        return [str(x) for x in eval(s)]
+    if isinstance(s, str) and s.startswith('[') and s.endswith(']'):
+        return [str(x) for x in ast.literal_eval(s)]
     elif isinstance(s, str):
         return [s]
     elif isinstance(s, list):
         return [str(x) for x in s]
     raise NotImplementedError
+
