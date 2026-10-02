@@ -82,7 +82,8 @@ def smart_resize(height: int, width: int, factor: int, min_pixels: Optional[int]
 
 
 def to_rgb(pil_image: Image.Image) -> Image.Image:
-      if pil_image.mode == 'RGBA':
+      if 'A' in pil_image.getbands() or 'transparency' in pil_image.info:
+          pil_image = pil_image.convert('RGBA')
           white_background = Image.new("RGB", pil_image.size, (255, 255, 255))
           white_background.paste(pil_image, mask=pil_image.split()[3])  # Use alpha channel as mask
           return white_background
