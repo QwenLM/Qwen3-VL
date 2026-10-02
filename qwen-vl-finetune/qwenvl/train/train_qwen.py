@@ -82,11 +82,11 @@ def set_model(model_args, model):
     if model_args.tune_mm_llm:
         for n, p in model.language_model.named_parameters():
             p.requires_grad = True
-        model.lm_head.requires_grad = True
+        model.lm_head.requires_grad_(True)
     else:
         for n, p in model.language_model.named_parameters():
             p.requires_grad = False
-        model.lm_head.requires_grad = False
+        model.lm_head.requires_grad_(False)
 
 
 def train(attn_implementation="flash_attention_2"):
