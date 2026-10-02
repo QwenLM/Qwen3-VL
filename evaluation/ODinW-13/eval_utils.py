@@ -2,6 +2,7 @@
 ODinW evaluation utilities.
 """
 import os
+import copy
 import json
 import tempfile
 import numpy as np
@@ -104,7 +105,15 @@ def compute_metrics(results: list, outfile_prefix: str = None, _coco_api: COCO =
         try:
             with open(result_files[metric], 'r') as f:
                 predictions = json.load(f)
-            coco_dt = _coco_api.loadRes(predictions)
+            if predictions:
+                coco_dt = _coco_api.loadRes(predictions)
+            else:
+                # COCO.loadRes indexes the first detection; an empty result is
+                # still a valid evaluation and must include all ground-truth images.
+                coco_dt = COCO()
+                coco_dt.dataset = copy.deepcopy(_coco_api.dataset)
+                coco_dt.dataset['annotations'] = []
+                coco_dt.createIndex()
         except IndexError:
             print('The testing results of the whole dataset is empty.')
             break
@@ -148,4 +157,5 @@ def compute_metrics(results: list, outfile_prefix: str = None, _coco_api: COCO =
         tmp_dir.cleanup()
     
     return eval_results
+
 
