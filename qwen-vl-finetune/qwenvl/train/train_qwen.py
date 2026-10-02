@@ -79,6 +79,9 @@ def set_model(model_args, model):
         for n, p in model.visual.merger.named_parameters():
             p.requires_grad = False
 
+    for merger in getattr(model.visual, "deepstack_merger_list", []):
+        merger.requires_grad_(model_args.tune_mm_mlp)
+
     if model_args.tune_mm_llm:
         for n, p in model.language_model.named_parameters():
             p.requires_grad = True
