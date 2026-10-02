@@ -405,10 +405,12 @@ class LazySupervisedDataset(Dataset):
             video_grid_thw = data_dict.get("video_grid_thw")
             if not isinstance(video_grid_thw, Sequence):
                 video_grid_thw = [video_grid_thw]
-            second_per_grid_ts = [
-                self.processor.video_processor.temporal_patch_size
-                / self.processor.video_processor.fps
-            ] * len(video_grid_thw)
+            second_per_grid_ts = data_dict.get("second_per_grid_ts")
+            if second_per_grid_ts is None:
+                second_per_grid_ts = [
+                    self.processor.video_processor.temporal_patch_size
+                    / self.processor.video_processor.fps
+                ] * sum(grid.shape[0] for grid in video_grid_thw)
         else:
             video_grid_thw = None
             second_per_grid_ts = None
@@ -420,7 +422,7 @@ class LazySupervisedDataset(Dataset):
             video_grid_thw=(
                 torch.cat(video_grid_thw, dim=0) if video_grid_thw else None
             ),
-            second_per_grid_ts=second_per_grid_ts if second_per_grid_ts else None,
+            second_per_grid_ts=second_per_grid_ts,
         )
 
         data_dict["position_ids"] = position_ids
