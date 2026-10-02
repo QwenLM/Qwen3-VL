@@ -427,7 +427,8 @@ def fetch_video(ele: Dict[str, Any], image_patch_size: int = 14, return_video_sa
             ]
             image_list = [future.result() for future in futures]
 
-        nframes = ceil_by_factor(len(image_list), FRAME_FACTOR)
+        original_nframes = len(image_list)
+        nframes = ceil_by_factor(original_nframes, FRAME_FACTOR)
         if len(image_list) < nframes:
             image_list.extend([image_list[-1]] * (nframes - len(image_list)))
 
@@ -441,8 +442,8 @@ def fetch_video(ele: Dict[str, Any], image_patch_size: int = 14, return_video_sa
         raw_fps = process_info.pop("raw_fps", sample_fps)
         video_metadata = dict(
             fps=raw_fps,
-            frames_indices=[i for i in range(len(video))],
-            total_num_frames=(nframes / sample_fps) * raw_fps,
+            frames_indices=[round(min(i, original_nframes - 1) * raw_fps / sample_fps) for i in range(nframes)],
+            total_num_frames=(original_nframes / sample_fps) * raw_fps,
         )
 
     nframes, _, height, width = video.shape
