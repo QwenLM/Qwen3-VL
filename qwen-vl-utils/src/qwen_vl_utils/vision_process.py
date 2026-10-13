@@ -15,7 +15,7 @@ import requests
 import torch
 import torchvision
 from packaging import version
-from PIL import Image
+from PIL import Image, ImageOps
 import numpy as np
 from torchvision import io, transforms
 from torchvision.transforms import InterpolationMode
@@ -117,7 +117,8 @@ def fetch_image(ele: Dict[str, Union[str, Image.Image]], image_patch_size: int =
         image_obj = Image.open(image)
     if image_obj is None:
         raise ValueError(f"Unrecognized image input, support local path, http url, base64 and PIL.Image, got {image}")
-    image = to_rgb(image_obj)
+    # Normalize orientation before resizing so dimensions match the displayed image.
+    image = to_rgb(ImageOps.exif_transpose(image_obj))
 
     ## resize
     if "resized_height" in ele and "resized_width" in ele:
