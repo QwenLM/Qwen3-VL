@@ -10,6 +10,8 @@ from functools import lru_cache
 from io import BytesIO
 from typing import Optional, Union, Tuple, List, Any, Dict
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 import requests
 import torch
@@ -106,7 +108,15 @@ def fetch_image(ele: Dict[str, Union[str, Image.Image]], image_patch_size: int =
             with BytesIO(response.content) as bio:
                 image_obj = copy.deepcopy(Image.open(bio))
     elif image.startswith("file://"):
-        image_obj = Image.open(image[7:])
+        image_path = image[7:]
+        # Keep legacy file://C:\path inputs as literal native paths on Windows.
+        if not (os.name == "nt" and len(image_path) >= 2 and image_path[1] == ":"):
+            uri = urlsplit(image)
+            image_path = url2pathname(uri.path)
+            # Reject remote hosts and UNC paths, including percent-encoded separators.
+            if uri.netloc.lower() not in ("", "localhost") or image_path[:2].replace("\\", "/") == "//":
+                raise ValueError(f"Only local file URIs are supported, got {image}")
+        image_obj = Image.open(image_path)
     elif image.startswith("data:image"):
         if "base64," in image:
             _, base64_data = image.split("base64,", 1)
