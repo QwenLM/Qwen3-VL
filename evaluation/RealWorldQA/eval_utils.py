@@ -307,6 +307,9 @@ def extract_answer_from_item(model, item, wait=5):
         if 'Failed to obtain answer via API' in ans:
             print('API failed to answer.')
         else:
+            if ans.strip() == 'Z':
+                log = f'{model.model} found no matching option: {ans}'
+                return dict(opt='Z', log=log, extract_model=model.model, extract_flag=False)
             ret = can_infer(ans, choices)
             if ret and ret != 'Z':
                 log = f'{model.model} extract Succeed. {model.model}:{ans}\n'
