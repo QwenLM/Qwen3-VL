@@ -181,10 +181,40 @@ def smart_nframes(
     return nframes
 
 
+def _decode_video_pyav(
+    video_path: str, start: float, end: Optional[float]
+) -> Tuple[torch.Tensor, float]:
+    import av
+
+    if end is not None and end < start:
+        raise ValueError("video_end must be greater than or equal to video_start")
+
+    with av.open(video_path) as container:
+        if not container.streams.video:
+            raise ValueError("No video stream found")
+        stream = container.streams.video[0]
+        if not stream.average_rate:
+            raise ValueError("Unable to determine the video frame rate")
+        video_fps = float(stream.average_rate)
+        frames = []
+        for index, frame in enumerate(container.decode(stream)):
+            timestamp = frame.time if frame.time is not None else index / video_fps
+            if timestamp < start:
+                continue
+            if end is not None and timestamp > end:
+                break
+            frames.append(frame.to_ndarray(format="rgb24"))
+
+    if not frames:
+        raise ValueError("No video frames found in the requested time range")
+    video = torch.from_numpy(np.stack(frames)).permute(0, 3, 1, 2)
+    return video, video_fps
+
+
 def _read_video_torchvision(
     ele: Dict[str, Any],
 ) -> Tuple[torch.Tensor, float]:
-    """read video using torchvision.io.read_video
+    """Read video using torchvision or PyAV when read_video is unavailable.
 
     Args:
         ele (dict): a dict contains the configuration of video.
@@ -196,21 +226,30 @@ def _read_video_torchvision(
         torch.Tensor: the video tensor with shape (T, C, H, W).
     """
     video_path = ele["video"]
-    if version.parse(torchvision.__version__) < version.parse("0.19.0"):
-        if "http://" in video_path or "https://" in video_path:
-            warnings.warn("torchvision < 0.19.0 does not support http/https video path, please upgrade to 0.19.0.")
-        if "file://" in video_path:
-            video_path = video_path[7:]
+    start_pts = ele.get("video_start", 0.0)
+    end_pts = ele.get("video_end")
     st = time.time()
-    video, audio, info = io.read_video(
-        video_path,
-        start_pts=ele.get("video_start", 0.0),
-        end_pts=ele.get("video_end", None),
-        pts_unit="sec",
-        output_format="TCHW",
-    )
-    total_frames, video_fps = video.size(0), info["video_fps"]
-    logger.info(f"torchvision:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
+    if hasattr(io, "read_video"):
+        if version.parse(torchvision.__version__) < version.parse("0.19.0"):
+            if "http://" in video_path or "https://" in video_path:
+                warnings.warn("torchvision < 0.19.0 does not support http/https video path, please upgrade to 0.19.0.")
+            if "file://" in video_path:
+                video_path = video_path[7:]
+        video, _, info = io.read_video(
+            video_path,
+            start_pts=start_pts,
+            end_pts=end_pts,
+            pts_unit="sec",
+            output_format="TCHW",
+        )
+        video_fps = info["video_fps"]
+        backend = "torchvision"
+    else:
+        # New torchvision releases removed read_video, which used PyAV.
+        video, video_fps = _decode_video_pyav(video_path, start_pts, end_pts)
+        backend = "pyav"
+    total_frames = video.size(0)
+    logger.info(f"{backend}:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
     nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
     idx = torch.linspace(0, total_frames - 1, nframes).round().long()
     sample_fps = nframes / max(total_frames, 1e-6) * video_fps
@@ -220,7 +259,7 @@ def _read_video_torchvision(
         fps=video_fps,
         frames_indices=idx,
         total_num_frames=total_frames,
-        video_backend="torchvision",
+        video_backend=backend,
     )
     return video, video_metadata, sample_fps
 
